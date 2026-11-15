@@ -21,21 +21,14 @@ done
 
 R=$ROOTFS
 
-# Processes chrooted into the rootfs (their /proc/PID/root points inside it).
-ubu_chroot_pids() {
-    for _d in /proc/[0-9]*; do
-        _root=$(readlink "$_d/root" 2>/dev/null) || continue
-        case "$_root" in
-            "$R" | "$R"/*) printf '%s\n' "${_d#/proc/}" ;;
-        esac
-    done
-}
-
 if [ "$KILL" = 1 ]; then
     _pids=$(ubu_chroot_pids)
     if [ -n "$_pids" ]; then
         ubu_log "stopping chroot processes: $(printf '%s' "$_pids" | tr '\n' ' ')"
+        # HUP too: interactive shells ignore TERM but exit on a hangup.
         # shellcheck disable=SC2086 # word splitting of the pid list is intended
+        kill -HUP $_pids 2>/dev/null
+        # shellcheck disable=SC2086
         kill -TERM $_pids 2>/dev/null
         _n=0
         while [ $_n -lt 10 ] && [ -n "$(ubu_chroot_pids)" ]; do
@@ -51,9 +44,19 @@ fi
 # Cut every propagation link first, so no umount below can reach the real
 # mounts (an rbind copy of /apex that is still shared would otherwise
 # unmount the real /apex/* submounts).
+# --make-rprivate is recursive, so only the topmost mounts need it (normally
+# just the rootfs self-bind). The check right below still aborts if anything
+# under the rootfs is left shared.
+_top=""
 for _mp in $(ubu_mounts_under "$R" | bb sort -u); do
-    _mp=$(ubu_unescape "$_mp")
+    case "$_mp" in *\\*) _mp=$(ubu_unescape "$_mp") ;; esac
+    _covered=0
+    for _t in $_top; do
+        case "$_mp" in "$_t"/*) _covered=1 ;; esac
+    done
+    [ "$_covered" = 1 ] && continue
     bb mount --make-rprivate "$_mp" 2>/dev/null || bb mount -o rprivate "$_mp" 2>/dev/null
+    _top="$_top $_mp"
 done
 if ubu_any_shared_under "$R"; then
     ubu_die "mounts under $R are still shared and propagation could not be changed; NOT unmounting (reboot to clear)"
@@ -64,7 +67,7 @@ while [ $_pass -lt 5 ]; do
     _list=$(ubu_mounts_under "$R")
     [ -z "$_list" ] && break
     for _mp in $_list; do
-        _mp=$(ubu_unescape "$_mp")
+        case "$_mp" in *\\*) _mp=$(ubu_unescape "$_mp") ;; esac
         ubu_is_mounted "$_mp" || continue
         if ! bb umount "$_mp" 2>/dev/null; then
             bb umount -l "$_mp" 2>/dev/null || ubu_warn "could not unmount $_mp"

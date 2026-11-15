@@ -314,6 +314,18 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# Processes chrooted into the rootfs (their /proc/PID/root points inside it).
+# One ls + awk instead of a readlink per process: ~600 forks took ~12 s when
+# run from the app, whose root shells share its (background-limited) cgroup.
+ubu_chroot_pids() {
+    # shellcheck disable=SC2012 # symlink targets of /proc/*/root: no odd file names here
+    ls -l /proc/[0-9]*/root 2>/dev/null | bb awk -v r="$ROOTFS" '
+        $(NF - 1) == "->" && ($NF == r || index($NF, r "/") == 1) {
+            split($(NF - 2), a, "/")
+            print a[3]
+        }'
+}
+
 ubu_init() {
     ubu_detect_busybox
     ubu_validate_paths

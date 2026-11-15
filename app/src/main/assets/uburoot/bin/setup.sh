@@ -8,6 +8,7 @@
 #   --dns "A B"        DNS servers (default: DNS_SERVERS from config)
 #   --hostname NAME    hostname (default: UBU_HOSTNAME from config)
 #   --no-apt           skip apt-get update / package installation (offline)
+#   --dns-only         only rewrite /etc/resolv.conf (the app's DNS setting), then exit
 set -u
 UBU_BIN_DIR=$(cd -P -- "$(dirname -- "$0")" && pwd -P)
 # shellcheck source=common.sh
@@ -26,6 +27,7 @@ PASSWORD_STDIN=0
 DNS=$DNS_SERVERS
 HOST=$UBU_HOSTNAME
 DO_APT=1
+DNS_ONLY=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -36,6 +38,7 @@ while [ $# -gt 0 ]; do
         --dns) DNS=${2:-}; shift ;;
         --hostname) HOST=${2:-}; shift ;;
         --no-apt) DO_APT=0 ;;
+        --dns-only) DNS_ONLY=1 ;;
         *) ubu_die "unknown option: $1" ;;
     esac
     shift
@@ -72,6 +75,21 @@ if [ "$PASSWORD_STDIN" = 1 ]; then
     IFS= read -r USER_PW || [ -n "$USER_PW" ] || ubu_die "no password on stdin"
 fi
 
+write_resolv_conf() {
+    rm -f "$R/etc/resolv.conf"
+    {
+        printf '# Written by UbuRoot setup.sh (DNS configurable in the app)\n'
+        for _s in $DNS; do printf 'nameserver %s\n' "$_s"; done
+    } >"$R/etc/resolv.conf" || ubu_die "cannot write resolv.conf"
+}
+
+if [ "$DNS_ONLY" = 1 ]; then
+    [ -d "$R/etc" ] || ubu_die "no rootfs at $R"
+    write_resolv_conf
+    ubu_log "resolv.conf: $DNS"
+    exit 0
+fi
+
 "$UBU_SH" "$UBU_BIN_DIR/mount.sh" || ubu_die "mount.sh failed"
 
 CHROOT_PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -82,11 +100,7 @@ in_chroot() {
 
 # --- Network files -------------------------------------------------------
 ubu_log "writing resolv.conf, hosts, hostname"
-rm -f "$R/etc/resolv.conf"
-{
-    printf '# Written by UbuRoot setup.sh (DNS configurable in the app)\n'
-    for _s in $DNS; do printf 'nameserver %s\n' "$_s"; done
-} >"$R/etc/resolv.conf" || ubu_die "cannot write resolv.conf"
+write_resolv_conf
 printf '%s\n' "$HOST" >"$R/etc/hostname"
 cat >"$R/etc/hosts" <<EOF
 127.0.0.1   localhost

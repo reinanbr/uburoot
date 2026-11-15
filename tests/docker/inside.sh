@@ -108,6 +108,14 @@ check "NOPASSWD sudoers" grep -q 'tester ALL=(ALL:ALL) NOPASSWD: ALL' $R/etc/sud
 chroot $R usermod -a -G aid_net_raw,aid_net_admin tester
 check "setup is re-runnable" sh -c "$B/setup.sh --user tester --nopasswd --no-apt"
 check "re-run removed tester from aid_net_raw/aid_net_admin" sh -c "! chroot $R id -Gn tester | grep -qE 'aid_net_(raw|admin)'"
+cp $R/etc/hosts /tmp/hosts.before
+echo "DNS_SERVERS='9.9.9.9 2620:fe::fe'" >/data/local/uburoot/uburoot.conf
+check "setup.sh --dns-only" $B/setup.sh --dns-only
+check "--dns-only wrote the configured servers" sh -c "grep -qx 'nameserver 9.9.9.9' $R/etc/resolv.conf && grep -qx 'nameserver 2620:fe::fe' $R/etc/resolv.conf"
+check "--dns-only left /etc/hosts alone" cmp -s /tmp/hosts.before $R/etc/hosts
+check "--dns-only rejects a bad server" sh -c "! $B/setup.sh --dns-only --dns '1.1.1.1;reboot'"
+rm -f /data/local/uburoot/uburoot.conf
+$B/setup.sh --dns-only >/dev/null 2>&1
 echo 1000000 >"$UBU_INOTIFY_FILE"
 $B/mount.sh 2>/dev/null
 check "inotify watches never lowered" grep -qx 1000000 "$UBU_INOTIFY_FILE"
@@ -150,6 +158,30 @@ out=$(echo 'echo INTERACTIVE_OK; exit' | $B/enter.sh tester 2>&1)
 check "login shell + INIT_COMMAND" sh -c "printf '%s' \"\$1\" | tr '\n' ' ' | grep -q 'INIT_RAN_tester INTERACTIVE_OK'" _ "$out"
 rm -f /data/local/uburoot/uburoot.conf
 check "invalid user rejected" sh -c "! $B/enter.sh 'bad;user' true"
+
+section "hangup.sh (closing one terminal tab)"
+# A real pty, as the app's sessions have: script(1) runs enter.sh on one.
+sleep 600 | script -qfc "$B/enter.sh tester" /dev/null >/dev/null 2>&1 &
+setsid chroot $R sleep 700 </dev/null >/dev/null 2>&1 &
+sleep 4
+tty_pids() { # chroot pids with a controlling terminal
+    for p in /proc/[0-9]*; do
+        [ "$(readlink "$p/root")" = "$R" ] || continue
+        s=$(cat "$p/stat" 2>/dev/null) || continue
+        s=${s##*) }
+        # shellcheck disable=SC2086 # split the stat fields
+        set -- $s
+        [ "$5" != 0 ] && echo "${p#/proc/}"
+    done
+}
+shell=$(tty_pids | head -1)
+check "session shell on a pty" test -n "$shell"
+check "hangup.sh" $B/hangup.sh "$shell"
+sleep 2
+check "session processes gone after hangup" test -z "$(tty_pids)"
+check "process without that terminal survives" sh -c "for p in /proc/[0-9]*; do [ \"\$(readlink \$p/root)\" = $R ] && grep -q '^sleep' \$p/comm && exit 0; done; exit 1"
+check "hangup.sh rejects a non-pty stdin" sh -c "! $B/hangup.sh \$\$ </dev/null"
+pkill -f 'sleep 700' 2>/dev/null; pkill -f 'sleep 600' 2>/dev/null
 
 section "CRITICAL RULE with real mounts: sabotaged umount"
 cat >/tmp/fakebb <<'EOF'

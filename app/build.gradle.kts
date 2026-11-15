@@ -22,8 +22,23 @@ android {
         }
     }
 
+    // Release signing comes from the environment (CI secrets), never from the
+    // repo. Without UBUROOT_KEYSTORE the release APK is left unsigned.
+    val keystore = providers.environmentVariable("UBUROOT_KEYSTORE").orNull?.let(::file)
+    if (keystore != null && keystore.isFile) {
+        signingConfigs {
+            create("release") {
+                storeFile = keystore
+                storePassword = providers.environmentVariable("UBUROOT_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("UBUROOT_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("UBUROOT_KEY_PASSWORD").get()
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

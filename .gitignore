@@ -13,3 +13,6 @@ captures/
 # Test artifacts (Ubuntu Base tarballs etc.)
 tests/.cache/
 .tools/
+
+# CI packaging output (tools/ci-package.sh)
+dist/

@@ -104,5 +104,9 @@ jobs:
           ls dist
           set -- dist/uburoot-*-release.apk
           [ -f "$1" ] || { echo "no signed release APK (keystore secrets missing?)" >&2; exit 1; }
+          # Only what is published (the artifact's SHA256SUMS also lists the debug build).
+          (cd dist && sha256sum uburoot-*-release.apk uburoot-*-release-module.zip \
+            uburoot.apk uburoot-module.zip >SHA256SUMS)
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "UbuRoot $TAG" --generate-notes \
-            dist/uburoot-*-release.apk dist/uburoot-*-release-module.zip dist/SHA256SUMS
+            dist/uburoot-*-release.apk dist/uburoot-*-release-module.zip \
+            dist/uburoot.apk dist/uburoot-module.zip dist/SHA256SUMS

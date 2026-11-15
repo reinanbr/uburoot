@@ -1,0 +1,83 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! **Security problems** (data loss, privilege escalation,
+        mounts leaking into Android) go through [SECURITY.md](https://github.com/reinanbr/uburoot/blob/main/SECURITY.md),
+        not here.
+  - type: input
+    id: version
+    attributes:
+      label: UbuRoot version
+      placeholder: "0.1.0 (from Releases, CI build, or commit)"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: "Samsung Galaxy S9 (SM-G9600)"
+    validations:
+      required: true
+  - type: input
+    id: rom
+    attributes:
+      label: ROM and Android version
+      placeholder: "LineageOS 19.1, Android 12"
+    validations:
+      required: true
+  - type: dropdown
+    id: root
+    attributes:
+      label: Root manager
+      options:
+        - Magisk
+        - KernelSU
+        - KernelSU Next
+        - APatch
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: root_version
+    attributes:
+      label: Root manager version
+      placeholder: "31.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How was UbuRoot installed?
+      options:
+        - APK
+        - Module from the root manager
+        - Recovery (TWRP)
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+  - type: textarea
+    id: rootinfo
+    attributes:
+      label: rootinfo output
+      description: "Output of: su --mount-master -c /data/local/uburoot/bin/rootinfo.sh"
+      render: text
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Terminal output, or `adb logcat` lines mentioning uburoot or su.
+      render: text

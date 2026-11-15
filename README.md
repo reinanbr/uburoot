@@ -1,6 +1,8 @@
 # UbuRoot
 
 [![CI](https://github.com/reinanbr/uburoot/actions/workflows/ci.yml/badge.svg)](https://github.com/reinanbr/uburoot/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/reinanbr/uburoot)](https://github.com/reinanbr/uburoot/releases/latest)
+[![License](https://img.shields.io/github/license/reinanbr/uburoot)](LICENSE)
 
 **A full Ubuntu (arm64) on your rooted Android phone, with a real terminal.**
 
@@ -18,7 +20,32 @@ Services, Firebase or analytics. The only network calls are the Ubuntu servers
 > tested on one device so far (see [Tested on](#tested-on)). Expect rough edges, and read
 > the [safety warning](#safety-warning) before you use it.
 
-<!-- Screenshots: docs/screenshots/ (installer, terminal) -->
+## Download
+
+| | File | |
+|---|---|---|
+| **App (APK)** | [uburoot.apk](https://github.com/reinanbr/uburoot/releases/latest/download/uburoot.apk) | install it like any app |
+| **Root module (zip)** | [uburoot-module.zip](https://github.com/reinanbr/uburoot/releases/latest/download/uburoot-module.zip) | Magisk / KernelSU / APatch → Modules → *Install from storage* |
+| Checksums | [SHA256SUMS](https://github.com/reinanbr/uburoot/releases/latest/download/SHA256SUMS) | |
+
+Both links always point to the latest release. They are **the same file** under two
+names, so install either one. All versions and release notes are on the
+[releases page](https://github.com/reinanbr/uburoot/releases). See
+[Install](#install) for the details.
+
+## Screenshots
+
+<p>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1_setup.png" width="240" alt="Setup: root manager, busybox, architecture, free space and namespace, plus the user form">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2_installing.png" width="240" alt="Setting up Ubuntu with the live log">
+</p>
+<p>
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3_terminal.png" width="490" alt="Terminal: Ubuntu 26.04.1 LTS on the phone, with gcc, Python, Node, Go, Rust, Java and git">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4_android.png" width="490" alt="Android commands inside Ubuntu: getprop, pm, cmd wifi, settings; /sdcard; /system is read-only">
+</p>
+
+*Setup, installing, the terminal with a development toolchain, and Android's own commands
+from Ubuntu. The UI is currently in Brazilian Portuguese.*
 
 ## Features
 
@@ -66,9 +93,10 @@ manager (with version).
 
 ## Install
 
-Download from [Releases](https://github.com/reinanbr/uburoot/releases). The `.apk` and
-the `-module.zip` are **the same file**, published twice because some root managers'
-file pickers only list `.zip`.
+Get the files from [Download](#download) (or any version from
+[Releases](https://github.com/reinanbr/uburoot/releases)). The `.apk` and the
+`-module.zip` are **the same file**, published twice because some root managers' file
+pickers only list `.zip`.
 
 Use one of these:
 
@@ -85,7 +113,7 @@ recovery (their docs say so), and the installer stops with a message.
 Optional: verify the release signature.
 
 ```sh
-apksigner verify --print-certs uburoot-0.1.0-release.apk
+apksigner verify --print-certs uburoot.apk
 # Signer #1 certificate SHA-256 digest:
 # b2fbab8052e8bc9ee7cb01bc26f309ce972d16fdda34a52bdb15b2628d2ab53d
 ```
@@ -259,6 +287,13 @@ Yes. It was built for de-Googled ROMs.
 **Which Ubuntu version do I get?**
 The newest LTS, discovered at install time from `cdimage.ubuntu.com`. Nothing is
 hardcoded.
+
+## Contributing
+
+Bug reports from untested devices help a lot, and so do pull requests. See
+[CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report
+security problems privately, as described in [SECURITY.md](SECURITY.md). Changes are
+listed in the [CHANGELOG](CHANGELOG.md).
 
 ## License
 

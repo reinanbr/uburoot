@@ -1,0 +1,1 @@
+Full Ubuntu (arm64) in a chroot on rooted Android, with a real terminal

@@ -385,6 +385,14 @@ download-artifact v8):
   `UBUROOT_KEYSTORE_PASSWORD`, `UBUROOT_KEY_ALIAS`, `UBUROOT_KEY_PASSWORD`; in CI from
   secrets, the keystore as `UBUROOT_KEYSTORE_BASE64`). Without them the release APK
   is unsigned and not published; the debug APK uses the runner's throwaway key.
+- Tag builds also publish version-less `uburoot.apk` / `uburoot-module.zip` (README links
+  use `releases/latest/download/<name>`); the release's `SHA256SUMS` lists only the
+  published files.
+- Repo docs: README (screenshots come from
+  `fastlane/metadata/android/en-US/images/phoneScreenshots/`, shared with F-Droid),
+  LICENSE (Apache-2.0, official text), NOTICE, CONTRIBUTING, CODE_OF_CONDUCT (Contributor
+  Covenant 2.1, official text; contact = GitHub private reporting, which is enabled),
+  SECURITY, CHANGELOG (Keep a Changelog), issue forms, PR template, `.editorconfig`.
 - The R8 release build (1.3 MB vs 11.4 MB debug) was installed on the device:
   preflight, deploy, terminal and the session suite (35/35) passed.
 

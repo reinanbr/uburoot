@@ -1,0 +1,17 @@
+<p>UbuRoot installs the official Ubuntu Base image and runs it in a chroot, using the root you already have (Magisk, KernelSU or APatch). It is not proot emulation: programs run natively, at full speed, with real sudo, apt, compilers, servers and network tools.</p>
+
+<p><b>Features</b></p>
+<ul>
+<li>Finds the newest Ubuntu LTS, downloads it with resume support and verifies it against Ubuntu's SHA256SUMS</li>
+<li>Sets up DNS, apt sources, sudo and your user</li>
+<li>Real terminal (PTY) with job control, 256 colors and UTF-8</li>
+<li>Your shared storage (/sdcard) and Android's own commands (pm, am, cmd, settings, dumpsys...) inside Ubuntu</li>
+<li>The APK is also a Magisk/KernelSU/APatch module</li>
+<li>No Google services, no analytics. Network access only to Ubuntu's servers and whatever you run yourself</li>
+</ul>
+
+<p><b>Requirements:</b> an arm64 phone with Android 8.0+, root (Magisk, KernelSU or APatch) and about 3 GB free.</p>
+
+<p><b>Warning:</b> root inside Ubuntu is root on your phone. Never delete the Ubuntu folder by hand while it is mounted, because your real /data and /sdcard are mounted inside it. Use the reset script instead.</p>
+
+<p>Ubuntu is a trademark of Canonical Ltd. This project is not affiliated with or endorsed by Canonical.</p>

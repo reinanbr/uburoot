@@ -3,6 +3,8 @@
 # bytes: root managers' file pickers may not list *.apk), checks that every
 # file is a signed APK that also carries the root-module files, and writes
 # SHA256SUMS. Run after ./gradlew assembleDebug [assembleRelease].
+# Tag builds also get version-less copies of the release (uburoot.apk,
+# uburoot-module.zip), so releases/latest/download/<name> links never change.
 # Usage: tools/ci-package.sh OUTDIR
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -41,7 +43,7 @@ check_apk() {
 }
 
 mkdir -p "$OUT"
-rm -f "$OUT"/uburoot-*.apk "$OUT"/uburoot-*-module.zip "$OUT/SHA256SUMS"
+rm -f "$OUT"/uburoot*.apk "$OUT"/uburoot*-module.zip "$OUT/SHA256SUMS"
 
 publish() { # publish SRC.apk FLAVOR
     check_apk "$1"
@@ -54,8 +56,13 @@ publish() { # publish SRC.apk FLAVOR
 publish "$APKS/debug/app-debug.apk" debug
 if [ -f "$APKS/release/app-release.apk" ]; then
     publish "$APKS/release/app-release.apk" release
+    if [ "${GITHUB_REF_TYPE:-}" = tag ]; then
+        cp "$APKS/release/app-release.apk" "$OUT/uburoot.apk"
+        cp "$APKS/release/app-release.apk" "$OUT/uburoot-module.zip"
+        echo "packaged uburoot.apk + uburoot-module.zip (stable names)"
+    fi
 elif [ -f "$APKS/release/app-release-unsigned.apk" ]; then
     echo "release APK is unsigned (no UBUROOT_KEYSTORE): not packaged"
 fi
 
-(cd "$OUT" && sha256sum uburoot-* >SHA256SUMS && cat SHA256SUMS)
+(cd "$OUT" && sha256sum uburoot*.apk uburoot*.zip >SHA256SUMS && cat SHA256SUMS)

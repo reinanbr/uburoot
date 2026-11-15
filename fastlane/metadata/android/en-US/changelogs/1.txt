@@ -1,0 +1,1 @@
+First release: root check (Magisk, KernelSU, APatch), Ubuntu LTS installer with SHA256 verification, real terminal, /sdcard and Android commands inside Ubuntu. The APK is also a root-manager module.

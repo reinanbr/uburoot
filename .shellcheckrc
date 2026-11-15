@@ -1,0 +1,2 @@
+# awk programs are intentionally single-quoted ($1, $2 are awk fields).
+disable=SC2016

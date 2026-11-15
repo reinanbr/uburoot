@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default (English) strings. Translations go in values-<lang>/strings.xml. -->
+<resources>
+    <string name="app_name" translatable="false">UbuRoot</string>
+
+    <string name="checking_root">Checking root access…</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_install">Install</string>
+    <string name="action_setup">Set up</string>
+
+    <string name="problem_no_root_title">No root access</string>
+    <string name="problem_no_root_body">UbuRoot needs root (Magisk, KernelSU or APatch). Grant access in your root manager, then tap Try again.</string>
+    <string name="problem_namespace_title">Isolated mount namespace</string>
+    <string name="problem_namespace_body">The root shell is not in the global mount namespace, so Ubuntu\'s mounts would not be visible across sessions. In Magisk, set the mount namespace mode to Global; in KernelSU, use the global namespace in the app profile; in APatch, enable the global namespace.</string>
+    <string name="problem_arch_title">Unsupported architecture</string>
+    <string name="problem_arch_body">UbuRoot only works on arm64 (aarch64) devices.</string>
+    <string name="problem_space_title">Not enough free space</string>
+    <string name="problem_space_body">Installing Ubuntu needs at least 3 GB free in /data.</string>
+    <string name="problem_deploy_title">Could not copy the scripts</string>
+    <string name="problem_deploy_body">The scripts could not be copied to /data/local/uburoot/bin.</string>
+
+    <string name="info_root">Root</string>
+    <string name="info_busybox">BusyBox</string>
+    <string name="info_arch">Architecture</string>
+    <string name="info_free">Free space</string>
+    <string name="info_namespace">Namespace</string>
+    <string name="namespace_global">global</string>
+    <string name="namespace_private">isolated</string>
+    <string name="warning_no_busybox">No BusyBox found; toybox commands will be used.</string>
+
+    <string name="form_intro">The newest Ubuntu Base LTS for arm64 will be downloaded from cdimage.ubuntu.com (about 35 MB), verified with SHA256 and installed in /data/local/uburoot.</string>
+    <string name="form_intro_setup_only">Ubuntu is already installed, but its setup did not finish. Choose the user to complete it.</string>
+    <string name="form_user">Ubuntu user</string>
+    <string name="form_user_hint">Lowercase letters, digits, _ and -</string>
+    <string name="form_password">Password (optional)</string>
+    <string name="form_password_hint">Empty: the account has no password (sudo works only with “passwordless sudo”)</string>
+    <string name="form_nopasswd">Passwordless sudo</string>
+
+    <string name="step_discover">Looking for the newest release…</string>
+    <string name="step_download">Downloading Ubuntu Base…</string>
+    <string name="step_extract">Verifying and extracting…</string>
+    <string name="step_setup">Setting up Ubuntu (apt, sudo, user)…</string>
+    <string name="install_failed">Installation failed</string>
+
+</resources>

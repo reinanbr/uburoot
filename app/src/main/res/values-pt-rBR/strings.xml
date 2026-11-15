@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Brazilian Portuguese. The default (English) strings are in values/strings.xml. -->
 <resources>
-    <string name="app_name">UbuRoot</string>
-
     <string name="checking_root">Verificando acesso root…</string>
     <string name="action_retry">Tentar novamente</string>
     <string name="action_install">Instalar</string>

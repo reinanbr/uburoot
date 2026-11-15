@@ -9,6 +9,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Several terminal sessions in tabs, kept alive by a foreground service. Its notification
+  shows the number of sessions and has *New session*, *Stop all* and a wake-lock toggle.
+- Extra keys (ESC, CTRL, ALT, TAB, arrows, HOME/END, PgUp/PgDn, `/ - | ~`), themes (dark,
+  light, Solarized dark/light), clickable links, remembered font size, Ctrl+Shift+C/V/T.
+- Settings screen: default user, startup command, mount toggles, DNS, *Repair mounts*
+  and *Reset Ubuntu* (type `DELETE` to confirm).
+- `setup.sh --dns-only` rewrites only `/etc/resolv.conf`; `hangup.sh` hangs up one
+  session's processes when its tab is closed.
 - README, LICENSE (Apache-2.0), NOTICE, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY and this
   changelog.
 - Issue forms (bug report, feature request), a pull request template and `.editorconfig`.
@@ -16,6 +24,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the README).
 - Releases also publish `uburoot.apk` and `uburoot-module.zip`, so
   `releases/latest/download/...` links stay stable across versions.
+
+### Fixed
+
+- Closing a session left its shell running inside Ubuntu: util-linux `su`, the session
+  leader, blocks SIGHUP. `hangup.sh` now signals the session's processes.
+- *Stop all* took about 40 s on the test phone; now about 5 s. Finding the chroot's
+  processes forked once per process, which is slow from the app's background cgroup, and
+  `umount.sh` made every mount private one by one although the operation is recursive.
+  Interactive shells, which ignore SIGTERM, now also get SIGHUP.
 
 ## [0.1.0] - 2026-11-15
 

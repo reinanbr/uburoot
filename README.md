@@ -65,12 +65,21 @@ Available now:
   other one.
 - **One file, three install methods**: the APK is also a root-manager module and a
   Magisk recovery zip (see [Install](#install)).
+- **Sessions in tabs**: `+` opens a session as your user, the menu also opens a root
+  session. A foreground service keeps them running in the background; its notification
+  shows how many are running and offers *New session*, *Stop all* (closes everything and
+  releases every mount) and an optional wake lock for long jobs with the screen off.
+- **Extra keys**: ESC, CTRL, ALT, TAB, arrows, HOME/END, PgUp/PgDn, `/ - | ~` (CTRL and
+  ALT stay pressed for the next key; hold a key to repeat it).
+- **Terminal comforts**: pinch to zoom (remembered), themes (dark, light, Solarized dark
+  and light), copy and paste, tap a link to open it, and hardware keyboard shortcuts:
+  Ctrl+Shift+C / V to copy / paste, Ctrl+Shift+T for a new tab.
+- **Settings**: default user, startup command, `/sdcard` and Android-integration mounts,
+  DNS servers, *Repair mounts*, and *Reset Ubuntu*, which asks you to type a
+  confirmation word and never deletes anything while something is still mounted.
 
 Planned (see the roadmap in [CLAUDE.md](CLAUDE.md#phase-status)):
 
-- several sessions in tabs, a foreground service and an extra-keys row;
-- settings: default user, startup command, mount toggles, DNS, "repair mounts", and an
-  in-app reset that requires typing a confirmation word;
 - `uburoot-*` commands to talk to Android (share, open, notify...);
 - start at boot through the module (e.g. run `sshd` at boot).
 

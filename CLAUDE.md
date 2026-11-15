@@ -14,7 +14,7 @@ Play Core, or any proprietary Google dependency.
 |------:|-------|--------|
 | 1 | Shell scripts + shellcheck + critical-rule tests | done (Docker 70/70; device 53/53 on Magisk, LineageOS 19.1 / Android 12) |
 | 2 | App MVP: root check, installer, one terminal session | done (unit 17/17; on device: clean install discover→download→SHA256→extract→setup→terminal, resume after a kill, apt as the user; device suite 59/59 incl. real reset; in-app session suite 35/35, host root identical to baseline after umount; dev/network suite 54/54; R8 release build verified on device) |
-| 3 | Multiple sessions, foreground service, extra keys, settings | todo |
+| 3 | Multiple sessions, foreground service, extra keys, settings | done (unit 22/22, Docker 90/90, device 53/53; on device: tabs, extra keys incl. sticky CTRL, links, themes, notification actions, wake lock, settings save/DNS/repair, Stop all in ~5 s, preflight waits for Stop all) |
 | 4 | Android integration (receiver, `uburoot-*` commands) | todo |
 | 5 | Boot module (Magisk/KSU/APatch zip) | todo |
 
@@ -50,7 +50,8 @@ no bashisms; `shellcheck -s sh` must pass.
 | `enter.sh [user] [cmd]` | `mount.sh`, then `chroot` with a clean env (`env -i`) into `bash -l` or `su - user` |
 | `android-env` | captures Android env into `$ROOTFS/etc/android.env` and writes the wrappers |
 | `install.sh <tar.gz> [sha256]` | checks arch/space, verifies SHA256, extracts with busybox tar into `rootfs.partial`, then renames it |
-| `setup.sh [--user N] ...` | post-install: DNS, hosts, hostname, AID groups, apt sources, locale, sudo, user |
+| `setup.sh [--user N] ...` | post-install: DNS, hosts, hostname, AID groups, apt sources, locale, sudo, user. `--dns-only` rewrites just `resolv.conf` (Settings → DNS) |
+| `hangup.sh PID` | SIGHUP+SIGCONT to the chroot processes whose controlling tty is PID's stdin (the app passes a session's `su` client when its tab closes) |
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=` (used by the app) |
 
@@ -116,7 +117,7 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
 - `/dev` is the real Android `/dev`. Creating `dev/shm` or `dev/fd` there creates them
   on the device's `/dev` tmpfs (harmless, lost at reboot).
 
-## App (Phase 2)
+## App (Phases 2–3)
 
 Build: AGP 9.5.1 with **built-in Kotlin** (never apply `org.jetbrains.kotlin.android`;
 only `org.jetbrains.kotlin.plugin.compose`), Kotlin 2.4.21, Gradle wrapper 9.9.1
@@ -136,7 +137,12 @@ dev machine the default `java-25` is a JRE, so build with
 | `install/Downloader` | resumable (`Range`, restarts if the server answers 200, re-fetches once on checksum mismatch), `.part` → rename after SHA256 |
 | `install/UbuConfig` | renders `uburoot.conf`, every value single-quoted (it is sourced as root) |
 | `install/InstallViewModel` | preflight → form → discover/download/`install.sh`/config/`setup.sh` → terminal |
-| `terminal/*` | one `TerminalSession` (`su --mount-master -c /data/local/uburoot/bin/enter.sh`, app env + `TERM`), kept in `SessionHolder` across activity recreation |
+| `install/ConfigStore` | reads/writes `uburoot.conf` through su (written to `.new`, then `mv`); lists users (uid 1000..59999) from the rootfs `passwd`. `UbuConfig.parse` keeps unknown keys |
+| `terminal/SessionManager` | every `TerminalSession` of the process (`su --mount-master -c "enter.sh [user]"`, app env + `TERM`); one delegating `TerminalSessionClient` forwards to the visible activity. `close()` runs `hangup.sh <client pid>` and then kills the client |
+| `terminal/SessionService` | foreground service (`specialUse`), started with the first session, stops after the last; notification with count + *New session* / *Stop all* / wake lock (partial wake lock + `WIFI_MODE_FULL_HIGH_PERF` lock, as Termux). *Stop all* = close sessions + `umount.sh --kill`; `stopping` flow makes the preflight wait |
+| `terminal/TerminalActivity` | `singleTask`; one `TerminalView`, tabs re-`attachSession`; menu (new/root session, close, themes, wake lock, settings, stop all); Back = `moveTaskToBack`; Enter on the last finished tab → `MainActivity` |
+| `terminal/ExtraKeys`, `TerminalTheme`, `TerminalPrefs`, `Links` | extra keys rows (pointer input, so the IME keeps focus; hold to repeat), color schemes into `TerminalColors.COLOR_SCHEME`, SharedPreferences (theme, font sp), URL in the tapped word |
+| `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor, *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused) |
 
 - libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
   (`BuilderImpl`). So preflight compares `mnt_ns` with `init_mnt_ns` and refuses if they
@@ -158,6 +164,34 @@ dev machine the default `java-25` is a JRE, so build with
   pending" (the atomic `rootfs.partial` rename makes that safe), and preflight deletes
   a leftover tarball. When the session ends, Enter goes back through `MainActivity`
   (preflight), never straight into `enter.sh` (the rootfs may have been reset).
+- Termux v0.118.3 details (javap): `TerminalView.inputCodePoint(cp, ctrl, alt)` itself
+  calls `readControlKey()/readAltKey()`, `handleKeyCode(keyCode, mod)` does not, so the
+  extra keys pass `KeyHandler.KEYMOD_*` for coded keys. `TerminalView.onKeyDown` stops the
+  text selection *before* asking the client, so Ctrl+Shift+C/V/T are caught in an
+  `OnKeyListener` (overriding `ComponentActivity.dispatchKeyEvent` trips lint
+  RestrictedApi). `TerminalColorScheme.updateWith()` starts with `reset()`, so the dark
+  theme is an empty map; each emulator's `mColors.reset()` copies the global scheme. A
+  session's process only starts on the first `attachSession` (size known).
+- **Closing a tab must hang up the session itself.** Killing the app-side `su` client and
+  closing the pty master left `su`+`bash` running in the chroot (tty_nr unchanged, so
+  no hangup reached them): the session leader is util-linux `su -`, which blocks SIGHUP
+  (SigBlk `fffffffefffb9eff`), and bash is in another process group. `hangup.sh` finds the
+  pty from `/proc/<client>/fd/0` (`stat -L`, so it works across mount namespaces) and
+  HUPs the chroot processes with that `tty_nr`. Verified on the device and in Docker
+  (`script(1)` gives a real pty).
+- **Root shells started by the app share its cgroup** (the same reason `am force-stop`
+  kills them). In the background a fork costs far more: the old `ubu_chroot_pids`
+  (a `readlink` per process, ~650 processes) took ~0.75 s from adb but ~12 s per call
+  from the app, and *Stop all* took ~40 s. It is now one `ls -l /proc/*/root | awk`.
+  `umount.sh` also runs `--make-rprivate` only on the topmost mounts (it is recursive;
+  `ubu_any_shared_under` still aborts if anything stays shared) and HUPs before TERM
+  (interactive bash ignores TERM). Full unmount of 54 mounts: 18 s → 1.7 s; *Stop all*
+  with a session: ~5 s.
+- Foreground service type: `specialUse` with `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`
+  (no other type fits a terminal). The typed `startForeground` path (API 34+) and the
+  POST_NOTIFICATIONS request (API 33+) are untested: the test phone is Android 12.
+  Also untested on the device: hardware keyboard shortcuts (Android 12's `input` has no
+  `keycombination`) and pinch-to-zoom (no multi-touch over adb).
 - User names: `[a-z_][a-z0-9_-]{0,31}`, minus the accounts that already exist in
   Ubuntu Base (`setup.sh` would reuse them and grant sudo). Without `--uid`, `setup.sh`
   takes the first id >= 9000 that is free as both uid and gid.
@@ -295,8 +329,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Phase 1 result: shellcheck clean (17 files),
-  guard 13/13, Docker 70/70.
+- `tests/run-all.sh`: everything below. Now: shellcheck 24 files, guard 13/13, Docker
+  90/90 (Phase 1 result: 17 files, 13/13, 70/70).
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
 - `tests/test_reset_guard.sh`: critical rule with dummy dirs, a fake mounts table and a
@@ -364,8 +398,8 @@ directories as a fallback.
 - Session process lifetime (observed): `am force-stop` of the app kills the whole
   chain (`su`, `setsid`, `bash`), since they stay in the app's process cgroup; the
   mounts stay. Earlier, an app killed during reinstall left 5 chroot processes
-  that `umount.sh --kill` had to stop. Phase 3's foreground service must account for
-  both.
+  that `umount.sh --kill` had to stop. The foreground service keeps the process alive;
+  a reinstall or force-stop still ends every session (the mounts stay).
 - Ubuntu 26.04's rust-coreutils (`env` etc.) **panics without `/proc`** (rustix reads
   `/proc/self/auxv`). Never `chroot` into the rootfs before `mount.sh`.
 - Paths not covered by the suite: the toybox-only fallback (no root manager ships without

@@ -45,4 +45,49 @@ class UbuConfigTest {
             assertFalse(bad, UbuConfig.isValidUserName(bad))
         }
     }
+
+    @Test
+    fun parseGivesBackWhatRenderWrote() {
+        val cfg = UbuConfig(
+            defaultUser = "ana",
+            mountSdcard = false,
+            androidIntegration = true,
+            dnsServers = "9.9.9.9 2620:fe::fe",
+            initCommand = "cd ~/src && echo 'it''s' \"q\" \$HOME `id`",
+            hostname = "h1",
+            inotifyMaxWatches = 1000,
+            sdcardSource = "/data/media/0",
+            extra = linkedMapOf("FUTURE_KEY" to "a 'b' c"),
+        )
+        assertEquals(cfg, UbuConfig.parse(cfg.render()))
+    }
+
+    @Test
+    fun parseHandEditsAndDefaults() {
+        val text = """
+            # comment
+            MOUNT_SDCARD=0
+            export DEFAULT_USER="bob"  # trailing comment
+            DNS_SERVERS='8.8.8.8 '"8.8.4.4"
+            INOTIFY_MAX_WATCHES=lots
+            SDCARD_SOURCE=/data/media/0
+        """.trimIndent()
+        val cfg = UbuConfig.parse(text)
+        assertFalse(cfg.mountSdcard)
+        assertTrue(cfg.androidIntegration)
+        assertEquals("bob", cfg.defaultUser)
+        assertEquals("8.8.8.8 8.8.4.4", cfg.dnsServers)
+        assertEquals(UbuConfig.DEFAULT_INOTIFY, cfg.inotifyMaxWatches)
+        assertEquals("/data/media/0", cfg.sdcardSource)
+        assertEquals(UbuConfig(), UbuConfig.parse(""))
+        assertFalse(UbuConfig().render().contains("SDCARD_SOURCE"))
+    }
+
+    @Test
+    fun dnsRules() {
+        for (ok in listOf("1.1.1.1", " 9.9.9.9  2620:fe::fe ")) assertTrue(ok, UbuConfig.isValidDns(ok))
+        for (bad in listOf("", "  ", "1.1.1.1;reboot", "dns.example", "1.1.1.1 \$(id)")) {
+            assertFalse(bad, UbuConfig.isValidDns(bad))
+        }
+    }
 }

@@ -8,12 +8,14 @@ import com.reinanbr.uburoot.root.RootShell
 import com.reinanbr.uburoot.root.ScriptDeployer
 import com.reinanbr.uburoot.root.Sh
 import com.reinanbr.uburoot.root.UbuPaths
+import com.reinanbr.uburoot.terminal.SessionService
 import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -55,6 +57,8 @@ class InstallViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun preflight(): Stage {
+        // A "Stop all" still unmounting: opening a session now would race mount.sh against umount.sh.
+        SessionService.stopping.first { !it }
         if (!RootShell.isRoot()) return Stage.Blocked(Problem.NO_ROOT, null)
         val deployed = ScriptDeployer.deploy(getApplication())
         if (!deployed.ok) return Stage.Blocked(Problem.DEPLOY_FAILED, null, deployed.text)
@@ -114,7 +118,9 @@ class InstallViewModel(app: Application) : AndroidViewModel(app) {
             withContext(Dispatchers.IO) { downloadDir.deleteRecursively() }
         }
 
-        writeConfig(UbuConfig(defaultUser = req.user))
+        // Keep what an earlier attempt (or a hand edit) left in the file.
+        val previous = runCatching { ConfigStore.read() }.getOrDefault(UbuConfig())
+        ConfigStore.write(getApplication(), previous.copy(defaultUser = req.user))
 
         _stage.value = Stage.Working(Step.SETUP)
         val args = buildString {
@@ -126,17 +132,6 @@ class InstallViewModel(app: Application) : AndroidViewModel(app) {
         val cmd = if (req.password.isNotEmpty()) "printf '%s\\n' ${Sh.quote(req.password)} | $args" else args
         val code = RootShell.stream(cmd, ::appendLog)
         if (code != 0) error("setup.sh failed (exit $code)")
-    }
-
-    private suspend fun writeConfig(config: UbuConfig) {
-        val tmp = File(getApplication<Application>().cacheDir, "uburoot.conf")
-        withContext(Dispatchers.IO) { tmp.writeText(config.render()) }
-        val r = RootShell.run(
-            "cp -f ${Sh.quote(tmp.absolutePath)} ${UbuPaths.CONFIG} && " +
-                "chown 0:0 ${UbuPaths.CONFIG} && chmod 644 ${UbuPaths.CONFIG}",
-        )
-        withContext(Dispatchers.IO) { tmp.delete() }
-        if (!r.ok) error("cannot write ${UbuPaths.CONFIG}: ${r.text}")
     }
 
     private fun appendLog(line: String) {

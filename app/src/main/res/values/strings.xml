@@ -42,4 +42,64 @@
     <string name="step_setup">Setting up Ubuntu (apt, sudo, user)…</string>
     <string name="install_failed">Installation failed</string>
 
+    <!-- Terminal -->
+    <string name="action_new_session">New session</string>
+    <string name="action_new_root_session">New root session</string>
+    <string name="action_close_session">Close session</string>
+    <string name="action_menu">Menu</string>
+    <string name="action_settings">Settings</string>
+    <string name="action_stop_all">Stop all</string>
+    <string name="action_acquire_wake_lock">Acquire wake lock</string>
+    <string name="action_release_wake_lock">Release wake lock</string>
+    <string name="stop_all_title">Stop Ubuntu?</string>
+    <string name="stop_all_body">Every session is closed, every process left in Ubuntu is killed and all its mounts are released.</string>
+    <string name="stopped_all">Ubuntu stopped: sessions closed and mounts released.</string>
+    <string name="stop_all_failed">Sessions closed, but some mounts could not be released:\n%1$s</string>
+    <string name="no_app_for_link">No app can open %1$s</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_solarized_dark">Solarized dark</string>
+    <string name="theme_solarized_light">Solarized light</string>
+
+    <!-- Foreground service notification -->
+    <string name="notif_channel">Terminal sessions</string>
+    <plurals name="notif_sessions">
+        <item quantity="one">%d session running</item>
+        <item quantity="other">%d sessions running</item>
+    </plurals>
+    <string name="notif_no_sessions">No sessions running</string>
+    <string name="notif_stopping">Stopping Ubuntu (closing processes, releasing mounts)…</string>
+    <string name="notif_wake_lock_held">wake lock held</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_load_failed">Could not read uburoot.conf: %1$s</string>
+    <string name="settings_session">Session</string>
+    <string name="settings_default_user">Default user for new sessions</string>
+    <string name="settings_init_command">Startup command</string>
+    <string name="settings_init_command_hint">Runs in every new interactive session (empty: none)</string>
+    <string name="settings_mounts">Mounts</string>
+    <string name="settings_mount_sdcard">Mount /sdcard</string>
+    <string name="settings_android_integration">Android integration (/system, /vendor, /apex, /data)</string>
+    <string name="settings_mounts_hint">Mount changes apply after “Repair mounts” or “Stop all”.</string>
+    <string name="settings_network">Network</string>
+    <string name="settings_dns">DNS servers</string>
+    <string name="settings_dns_hint">IPv4 or IPv6 addresses separated by spaces; applied right away</string>
+    <string name="settings_dns_invalid">Use IP addresses only, separated by spaces</string>
+    <string name="action_save">Save</string>
+    <string name="settings_maintenance">Maintenance</string>
+    <string name="action_repair_mounts">Repair mounts</string>
+    <string name="action_repair">Repair</string>
+    <string name="repair_body">Closes every session, kills what is left in Ubuntu, releases all mounts and mounts them again with the current settings.</string>
+    <string name="action_reset">Reset Ubuntu</string>
+    <string name="reset_title">Delete the whole Ubuntu system?</string>
+    <string name="reset_body">Every session is closed and the Ubuntu system, with all its files, users and packages, is deleted. Your phone\'s data in /sdcard and /data is not touched: everything is unmounted first, and the deletion is refused while anything is still mounted. Type %1$s to confirm.</string>
+    <string name="reset_type_word">Type %1$s</string>
+    <!-- The word the user must type to confirm the reset; translate it. -->
+    <string name="reset_confirm_word">DELETE</string>
+    <string name="notice_saved">Saved. New sessions use the new settings.</string>
+    <string name="notice_repaired">Mounts repaired.</string>
+    <string name="notice_repair_failed">Repair failed; see the log below.</string>
+    <string name="notice_reset_refused">Reset refused: something is still mounted inside Ubuntu. Nothing was deleted.</string>
+    <string name="notice_reset_failed">Reset failed; see the log below.</string>
 </resources>

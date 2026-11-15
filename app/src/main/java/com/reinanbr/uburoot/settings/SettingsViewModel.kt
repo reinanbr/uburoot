@@ -1,0 +1,122 @@
+package com.reinanbr.uburoot.settings
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.reinanbr.uburoot.install.ConfigStore
+import com.reinanbr.uburoot.install.UbuConfig
+import com.reinanbr.uburoot.root.RootShell
+import com.reinanbr.uburoot.root.UbuPaths
+import com.reinanbr.uburoot.terminal.SessionManager
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+enum class Notice { SAVED, REPAIRED, REPAIR_FAILED, RESET_REFUSED, RESET_FAILED }
+
+data class SettingsState(
+    val loading: Boolean = true,
+    val loadError: String? = null,
+    /** What uburoot.conf holds now. */
+    val saved: UbuConfig? = null,
+    val users: List<String> = emptyList(),
+    val busy: Boolean = false,
+    val log: List<String> = emptyList(),
+    val notice: Notice? = null,
+    /** The rootfs is gone: the screen hands over to the installer. */
+    val resetDone: Boolean = false,
+)
+
+class SettingsViewModel(app: Application) : AndroidViewModel(app) {
+    private val _state = MutableStateFlow(SettingsState())
+    val state: StateFlow<SettingsState> = _state.asStateFlow()
+
+    init {
+        load()
+    }
+
+    fun load() {
+        _state.update { it.copy(loading = true, loadError = null) }
+        viewModelScope.launch {
+            _state.update {
+                try {
+                    it.copy(loading = false, saved = ConfigStore.read(), users = ConfigStore.users())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    it.copy(loading = false, loadError = e.message ?: e.javaClass.simpleName)
+                }
+            }
+        }
+    }
+
+    /** Writes uburoot.conf; a DNS change is applied to the rootfs right away. */
+    fun save(config: UbuConfig) = work {
+        val before = _state.value.saved
+        ConfigStore.write(getApplication(), config)
+        _state.update { it.copy(saved = config) }
+        if (before?.dnsServers?.trim() != config.dnsServers.trim()) {
+            val code = RootShell.stream("${UbuPaths.script("setup.sh")} --dns-only", ::log)
+            if (code != 0) error("setup.sh --dns-only failed (exit $code)")
+        }
+        Notice.SAVED
+    }
+
+    /** Closes every session, releases every mount (killing what is left) and mounts again. */
+    fun repairMounts() = work {
+        SessionManager.closeAll()
+        val code = RootShell.stream(
+            "${UbuPaths.script("umount.sh")} --kill && ${UbuPaths.script("mount.sh")}",
+            ::log,
+        )
+        if (code == 0) Notice.REPAIRED else Notice.REPAIR_FAILED
+    }
+
+    /**
+     * Deletes the rootfs. reset.sh unmounts first (umount.sh --kill) and refuses,
+     * exit 3, while anything is still mounted under it (CLAUDE.md, critical rule).
+     */
+    fun reset() = work {
+        SessionManager.closeAll()
+        when (val code = RootShell.stream("${UbuPaths.script("reset.sh")} --yes", ::log)) {
+            0 -> {
+                _state.update { it.copy(resetDone = true) }
+                null
+            }
+
+            3 -> Notice.RESET_REFUSED
+
+            else -> {
+                log("reset.sh: exit $code")
+                Notice.RESET_FAILED
+            }
+        }
+    }
+
+    fun dismissNotice() = _state.update { it.copy(notice = null) }
+
+    private fun work(block: suspend () -> Notice?) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, log = emptyList(), notice = null) }
+        viewModelScope.launch {
+            val notice = try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                log("ERROR: ${e.message ?: e.javaClass.simpleName}")
+                null
+            }
+            _state.update { it.copy(busy = false, notice = notice) }
+        }
+    }
+
+    private fun log(line: String) = _state.update { it.copy(log = (it.log + line).takeLast(MAX_LOG_LINES)) }
+
+    private companion object {
+        const val MAX_LOG_LINES = 500
+    }
+}

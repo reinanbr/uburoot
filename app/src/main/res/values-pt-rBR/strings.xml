@@ -40,4 +40,64 @@
     <string name="step_setup">Configurando o Ubuntu (apt, sudo, usuário)…</string>
     <string name="install_failed">A instalação falhou</string>
 
+    <!-- Terminal -->
+    <string name="action_new_session">Nova sessão</string>
+    <string name="action_new_root_session">Nova sessão root</string>
+    <string name="action_close_session">Fechar sessão</string>
+    <string name="action_menu">Menu</string>
+    <string name="action_settings">Configurações</string>
+    <string name="action_stop_all">Parar tudo</string>
+    <string name="action_acquire_wake_lock">Manter acordado (wake lock)</string>
+    <string name="action_release_wake_lock">Liberar wake lock</string>
+    <string name="stop_all_title">Parar o Ubuntu?</string>
+    <string name="stop_all_body">Todas as sessões são fechadas, os processos que restarem no Ubuntu são encerrados e todos os mounts são desfeitos.</string>
+    <string name="stopped_all">Ubuntu parado: sessões fechadas e mounts desfeitos.</string>
+    <string name="stop_all_failed">Sessões fechadas, mas alguns mounts não puderam ser desfeitos:\n%1$s</string>
+    <string name="no_app_for_link">Nenhum app abre %1$s</string>
+    <string name="theme_dark">Escuro</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_solarized_dark">Solarized escuro</string>
+    <string name="theme_solarized_light">Solarized claro</string>
+
+    <!-- Notificação do serviço em primeiro plano -->
+    <string name="notif_channel">Sessões do terminal</string>
+    <plurals name="notif_sessions">
+        <item quantity="one">%d sessão ativa</item>
+        <item quantity="many">%d sessões ativas</item>
+        <item quantity="other">%d sessões ativas</item>
+    </plurals>
+    <string name="notif_no_sessions">Nenhuma sessão ativa</string>
+    <string name="notif_stopping">Parando o Ubuntu (encerrando processos, desfazendo mounts)…</string>
+    <string name="notif_wake_lock_held">wake lock ativo</string>
+
+    <!-- Configurações -->
+    <string name="settings_title">Configurações</string>
+    <string name="settings_load_failed">Não foi possível ler o uburoot.conf: %1$s</string>
+    <string name="settings_session">Sessão</string>
+    <string name="settings_default_user">Usuário padrão das novas sessões</string>
+    <string name="settings_init_command">Comando de inicialização</string>
+    <string name="settings_init_command_hint">Roda em cada nova sessão interativa (vazio: nenhum)</string>
+    <string name="settings_mounts">Mounts</string>
+    <string name="settings_mount_sdcard">Montar /sdcard</string>
+    <string name="settings_android_integration">Integração com o Android (/system, /vendor, /apex, /data)</string>
+    <string name="settings_mounts_hint">Mudanças de mount valem depois de “Reparar mounts” ou “Parar tudo”.</string>
+    <string name="settings_network">Rede</string>
+    <string name="settings_dns">Servidores DNS</string>
+    <string name="settings_dns_hint">Endereços IPv4 ou IPv6 separados por espaço; aplicado na hora</string>
+    <string name="settings_dns_invalid">Use só endereços IP, separados por espaço</string>
+    <string name="action_save">Salvar</string>
+    <string name="settings_maintenance">Manutenção</string>
+    <string name="action_repair_mounts">Reparar mounts</string>
+    <string name="action_repair">Reparar</string>
+    <string name="repair_body">Fecha todas as sessões, encerra o que restar no Ubuntu, desfaz todos os mounts e monta de novo com as configurações atuais.</string>
+    <string name="action_reset">Reset do Ubuntu</string>
+    <string name="reset_title">Apagar todo o sistema Ubuntu?</string>
+    <string name="reset_body">Todas as sessões são fechadas e o sistema Ubuntu, com todos os arquivos, usuários e pacotes, é apagado. Os dados do celular em /sdcard e /data não são tocados: tudo é desmontado antes, e a exclusão é recusada enquanto algo ainda estiver montado. Digite %1$s para confirmar.</string>
+    <string name="reset_type_word">Digite %1$s</string>
+    <string name="reset_confirm_word">APAGAR</string>
+    <string name="notice_saved">Salvo. As novas sessões usam as novas configurações.</string>
+    <string name="notice_repaired">Mounts reparados.</string>
+    <string name="notice_repair_failed">O reparo falhou; veja o log abaixo.</string>
+    <string name="notice_reset_refused">Reset recusado: ainda há algo montado dentro do Ubuntu. Nada foi apagado.</string>
+    <string name="notice_reset_failed">O reset falhou; veja o log abaixo.</string>
 </resources>

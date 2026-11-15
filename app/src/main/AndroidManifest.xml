@@ -3,6 +3,12 @@
 
     <!-- Only for cdimage.ubuntu.com (rootfs download). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SessionService keeps the terminal sessions alive in the background. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Optional wake lock / Wi-Fi lock from the notification ("Acquire wake lock"). -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".UbuRootApp"
@@ -27,7 +33,24 @@
             android:name=".terminal.TerminalActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode|fontScale"
             android:exported="false"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.UbuRoot.Terminal"
             android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
+
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="@string/settings_title" />
+
+        <!-- A terminal emulator has no matching foreground service type: the
+             shells are user-started, long-running processes (specialUse). -->
+        <service
+            android:name=".terminal.SessionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps user-started terminal sessions (a chroot shell) running while the app is in the background." />
+        </service>
     </application>
 </manifest>

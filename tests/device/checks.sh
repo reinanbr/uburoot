@@ -1,10 +1,15 @@
 #!/system/bin/sh
 # Runs ON THE DEVICE as root in the global mount namespace (see run.sh).
-# Assumes install.sh + setup.sh --user tester already ran.
+# Assumes install.sh + setup.sh --user <name> --nopasswd already ran (the
+# app's installer does that). The user is TEST_USER, else DEFAULT_USER from
+# uburoot.conf, else tester.
 # Usage: checks.sh [--reset]   (--reset: also run the real reset at the end)
 set -u
 B=/data/local/uburoot/bin
 R=/data/local/uburoot/rootfs
+# shellcheck disable=SC1091 # the config only exists on the device
+TU=${TEST_USER:-$( . /data/local/uburoot/uburoot.conf 2>/dev/null; echo "${DEFAULT_USER:-tester}")}
+[ "$TU" = root ] && TU=tester
 BBX=/data/adb/magisk/busybox
 [ -x "$BBX" ] || BBX=/data/adb/ksu/bin/busybox
 [ -x "$BBX" ] || BBX=/data/adb/ap/bin/busybox
@@ -81,20 +86,20 @@ has "am get-current-user" "$out" "0"
 out=$($B/enter.sh root 'android toybox --version' 2>&1)
 has "generic 'android <cmd>' runner" "$out" "toybox"
 
-section "enter.sh as user tester (uid 9000)"
-out=$($B/enter.sh tester 'id; pwd; sudo -n true && echo SUDO_OK' 2>&1)
-has "uid 9000" "$out" "uid=9000(tester)"
+section "enter.sh as user $TU (uid 9000)"
+out=$($B/enter.sh "$TU" 'id; pwd; sudo -n true && echo SUDO_OK' 2>&1)
+has "uid 9000" "$out" "uid=9000($TU)"
 has "aid_inet via su -" "$out" "3003(aid_inet)"
-has "home dir" "$out" "/home/tester"
+has "home dir" "$out" "/home/$TU"
 has "sudo NOPASSWD" "$out" SUDO_OK
 case "$out" in *"unable to resolve"*) bad "no hostname warning" ;; *) ok "no hostname warning" ;; esac
-out=$($B/enter.sh tester 'timeout 8 bash -c "echo > /dev/tcp/1.1.1.1/53" && echo TCP_OK' 2>&1)
+out=$($B/enter.sh "$TU" 'timeout 8 bash -c "echo > /dev/tcp/1.1.1.1/53" && echo TCP_OK' 2>&1)
 has "user: TCP (paranoid network)" "$out" TCP_OK
-out=$($B/enter.sh tester 'f=/sdcard/Download/.ubu_check; echo x >$f && stat -c "MODE=%g:%a" $f; rm -f $f' 2>&1)
+out=$($B/enter.sh "$TU" 'f=/sdcard/Download/.ubu_check; echo x >$f && stat -c "MODE=%g:%a" $f; rm -f $f' 2>&1)
 has "user writes /sdcard (group media_rw, group-writable)" "$out" "MODE=1023:664"
-out=$(UBU_CWD=/sdcard/Download $B/enter.sh tester pwd 2>&1)
+out=$(UBU_CWD=/sdcard/Download $B/enter.sh "$TU" pwd 2>&1)
 has "UBU_CWD start dir" "$out" /sdcard/Download
-out=$($B/enter.sh tester 'getprop ro.product.model' 2>&1)
+out=$($B/enter.sh "$TU" 'getprop ro.product.model' 2>&1)
 has "user: getprop" "$out" "$(getprop ro.product.model)"
 
 section "CRITICAL RULE with real mounts: sabotaged umount"

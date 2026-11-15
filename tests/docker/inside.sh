@@ -87,7 +87,7 @@ check "group aid_inet=3003" grep -q '^aid_inet:x:3003:' $R/etc/group
 check "group aid_net_raw=3004" grep -q '^aid_net_raw:x:3004:' $R/etc/group
 check "group aid_net_admin=3005" grep -q '^aid_net_admin:x:3005:' $R/etc/group
 check "_apt primary group is aid_inet" sh -c "awk -F: '\$1==\"_apt\"{exit \$4==3003?0:1}' $R/etc/passwd"
-check "user tester uid 20000" sh -c "awk -F: '\$1==\"tester\"{exit \$3==20000?0:1}' $R/etc/passwd"
+check "user tester uid 9000" sh -c "awk -F: '\$1==\"tester\"{exit \$3==9000?0:1}' $R/etc/passwd"
 check "sudo installed" chroot $R test -x /usr/bin/sudo
 check "NOPASSWD sudoers" grep -q 'tester ALL=(ALL:ALL) NOPASSWD: ALL' $R/etc/sudoers.d/90-uburoot-tester
 check "setup is re-runnable" sh -c "$B/setup.sh --user tester --nopasswd --no-apt"
@@ -116,7 +116,7 @@ check "am wrapper: no glibc env leak, args passed" sh -c "printf '%s' \"\$1\" | 
 check "clean env: LANG/TERM" sh -c "printf '%s' \"\$1\" | grep -q 'LANG=C.UTF-8 TERM=xterm-256color'" _ "$out"
 check "android.env has fingerprint" grep -q '^# fingerprint=test/fingerprint/1' $R/etc/android.env
 out=$($B/enter.sh tester 'id -u; pwd; sudo -n true && echo SUDO_OK' 2>&1)
-check "user: uid 20000, home dir, sudo" sh -c "printf '%s' \"\$1\" | tr '\n' ' ' | grep -q '^20000 /home/tester SUDO_OK'" _ "$out"
+check "user: uid 9000, home dir, sudo" sh -c "printf '%s' \"\$1\" | tr '\n' ' ' | grep -q '^9000 /home/tester SUDO_OK'" _ "$out"
 check "no hostname resolution warning" sh -c "! printf '%s' \"\$1\" | grep -q 'unable to resolve'" _ "$out"
 out=$(UBU_CWD=/sdcard/Download $B/enter.sh tester 'pwd' 2>&1)
 check "UBU_CWD start dir" sh -c "printf '%s' \"\$1\" | grep -qx /sdcard/Download" _ "$out"

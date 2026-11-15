@@ -2,7 +2,7 @@
 # Post-install configuration of the Ubuntu rootfs. Safe to re-run.
 # Usage: setup.sh [options]
 #   --user NAME        create this user (with sudo)
-#   --uid N            UID/GID for the user (default 20000; see CLAUDE.md)
+#   --uid N            UID/GID for the user (default 9000, must be < 10000; see CLAUDE.md)
 #   --nopasswd         passwordless sudo for the user
 #   --password-stdin   read the user's password from the first line of stdin
 #   --dns "A B"        DNS servers (default: DNS_SERVERS from config)
@@ -20,7 +20,7 @@ ubu_rootfs_installed || ubu_die "no Ubuntu rootfs at $ROOTFS (run install.sh fir
 
 R=$ROOTFS
 NEW_USER=""
-NEW_UID=20000
+NEW_UID=9000
 NOPASSWD=0
 PASSWORD_STDIN=0
 DNS=$DNS_SERVERS
@@ -125,6 +125,8 @@ G_RAW=$(ensure_group aid_net_raw 3004) || ubu_die "cannot create group aid_net_r
 G_ADMIN=$(ensure_group aid_net_admin 3005) || ubu_die "cannot create group aid_net_admin"
 AID_GROUPS="$G_INET,$G_RAW,$G_ADMIN"
 ubu_log "network groups: $AID_GROUPS"
+# /sdcard is usually /data/media/0 (media_rw:media_rw 2770); see mount.sh.
+G_MEDIA=$(ensure_group aid_media_rw 1023) || ubu_die "cannot create group aid_media_rw"
 
 in_chroot usermod -a -G "$AID_GROUPS" root || ubu_warn "usermod root failed"
 if grep -q '^_apt:' "$R/etc/passwd"; then
@@ -170,8 +172,10 @@ printf '# UbuRoot: sources are in /etc/apt/sources.list.d/ubuntu.sources\n' >"$R
 # --- Packages ----------------------------------------------------------------
 if [ "$DO_APT" = 1 ]; then
     ubu_log "apt-get update"
-    if ! in_chroot apt-get update; then
-        ubu_warn "apt-get update failed with the _apt sandbox; retrying as root"
+    # Retry once with the _apt sandbox first: failures are often transient
+    # (seen on a real device), and running downloads as root is the fallback.
+    if ! in_chroot apt-get update && ! { sleep 3 && in_chroot apt-get update; }; then
+        ubu_warn "apt-get update failed twice with the _apt sandbox; retrying as root"
         printf 'APT::Sandbox::User "root";\n' >"$R/etc/apt/apt.conf.d/01uburoot-sandbox"
         in_chroot apt-get update || ubu_die "apt-get update failed (network/DNS?)"
     fi
@@ -180,9 +184,21 @@ if [ "$DO_APT" = 1 ]; then
 fi
 
 # --- User ------------------------------------------------------------------------
+# netd's BPF firewall exempts only uid < 10000 (AID_APP_START). Higher uids are
+# app uids and get dropped whenever an allowlist chain (restricted networking,
+# doze, powersave) is on; 20000+ is also the SDK sandbox range since Android 13.
+ubu_uid_ok() {
+    case "$1" in '' | *[!0-9]*) return 1 ;; esac
+    [ "$1" -ge 8000 ] && [ "$1" -le 9996 ]
+}
 if [ -n "$NEW_USER" ]; then
+    ubu_uid_ok "$NEW_UID" ||
+        ubu_warn "uid $NEW_UID is outside 8000-9996: network may be blocked or it may clash with an Android AID"
     if grep -q "^$NEW_USER:" "$R/etc/passwd"; then
         ubu_log "user $NEW_USER already exists"
+        _cur=$(bb awk -F: -v u="$NEW_USER" '$1 == u { print $3; exit }' "$R/etc/passwd")
+        ubu_uid_ok "$_cur" ||
+            ubu_warn "existing user $NEW_USER has uid $_cur (outside 8000-9996); network may be blocked"
     else
         if ! grep -q "^$NEW_USER:" "$R/etc/group"; then
             in_chroot groupadd -g "$NEW_UID" "$NEW_USER" || ubu_die "groupadd $NEW_USER failed"
@@ -191,7 +207,7 @@ if [ -n "$NEW_USER" ]; then
             ubu_die "useradd $NEW_USER failed"
         ubu_log "created user $NEW_USER (uid $NEW_UID)"
     fi
-    _groups=$AID_GROUPS
+    _groups="$AID_GROUPS,$G_MEDIA"
     grep -q '^sudo:' "$R/etc/group" && _groups="sudo,$_groups"
     in_chroot usermod -a -G "$_groups" "$NEW_USER" || ubu_warn "usermod $NEW_USER failed"
     if [ -n "$USER_PW" ]; then

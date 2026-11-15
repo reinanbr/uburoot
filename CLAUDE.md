@@ -12,7 +12,7 @@ Play Core, or any proprietary Google dependency.
 
 | Phase | Scope | Status |
 |------:|-------|--------|
-| 1 | Shell scripts + shellcheck + critical-rule tests | done (tested in Docker, **not on a device**) |
+| 1 | Shell scripts + shellcheck + critical-rule tests | done (Docker 70/70; device 53/53 on Magisk, LineageOS 19.1 / Android 12) |
 | 2 | App MVP: root check, installer, one terminal session | todo |
 | 3 | Multiple sessions, foreground service, extra keys, settings | todo |
 | 4 | Android integration (receiver, `uburoot-*` commands) | todo |
@@ -80,7 +80,10 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
 
 - `ROOTFS` is self-bind-mounted and made **private**. `/data` is a shared mount on
   Android (init does `MS_REC|MS_SHARED` on `/`). Without this, every mount under the
-  rootfs would propagate to peer namespaces.
+  rootfs would propagate to peer namespaces. `/data` is also `nosuid`, which the
+  self-bind inherits and which breaks sudo. So `mount.sh` remounts it with
+  `remount,bind,nodev`. A remount replaces every per-mount flag, so `nodev` has to
+  be passed again.
 - Every bind (`/dev`, `/dev/pts`, `/sdcard`, Android partitions, `/data`) is made
   **rslave** immediately: host changes (APEX updates, etc.) still arrive, but nothing
   goes back. This matters most for **rbind** (`/apex`, `/system`, ...). Without it,
@@ -95,10 +98,15 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
   `/system /vendor /product /system_ext /odm /apex /linkerconfig` (rbind, same paths;
   if the host path is a symlink, the same symlink is created instead) and `/data`
   (non-recursive bind).
-- `/sdcard` source: `SDCARD_SOURCE`, else the first of `/storage/emulated/0`,
-  `/mnt/user/0/emulated/0`, `/data/media/0` that looks real (has `Android/` or
-  `Download/`). The global namespace may not have the FUSE view at `/storage`.
-  `/data/media/0` bypasses FUSE/MediaStore and is the last resort.
+- `/sdcard` source: `SDCARD_SOURCE`, else the first of `/data/media/0`,
+  `/storage/emulated/0`, `/mnt/user/0/emulated/0` that looks real (has `Android/` or
+  `Download/`). `/data/media/0` comes first because the FUSE view returns **EFAULT**
+  to every non-root uid that isn't an app (MediaProvider can't map it to a
+  package; verified on the device for uid 9000 with groups 9997/1023/1015/1028).
+  `/data/media/0` is `media_rw:media_rw 2770` (setgid). The user gets
+  `aid_media_rw` (1023), and Ubuntu's pam_umask gives it umask 002, so its files are
+  `9000:1023 664`, labelled `media_rw_data_file`, and still writable by MediaProvider.
+  The cost: MediaStore isn't notified (Gallery needs a rescan).
 - Turning a toggle off doesn't unmount a live mount. That happens on "Parar tudo" or
   "Reparar mounts" (`umount.sh` + `mount.sh`).
 - `/dev` is the real Android `/dev`. Creating `dev/shm` or `dev/fd` there creates them
@@ -144,10 +152,21 @@ directories as a fallback.
   drops privileges with `setgroups(1, &pw_gid)`, so it keeps **only the primary group**.
   So `_apt` gets primary group `aid_inet`. If `apt-get update` still fails,
   `setup.sh` writes `APT::Sandbox::User "root";` and retries.
-- Default user UID/GID = **20000**, not 1000. Ubuntu UIDs share the kernel with
+- Default user UID/GID = **9000**, not 1000. Ubuntu UIDs share the kernel with
   Android: UID 1000 is `AID_SYSTEM` (system_server!). A chroot user with UID 1000 could
-  kill Android system processes and acts as system over binder. 20000–89999 are
-  gid-only ranges on Android user 0, so no Android process runs with those UIDs.
+  kill Android system processes and acts as system over binder. The UID must be
+  **< 10000** (`AID_APP_START`). netd's BPF `bpf_owner_match` exempts only "system"
+  uids. Android 12 `system/netd/bpf_progs/netd.c` checks `0 <= uid <= 9999`
+  (`UidConstants.h`), and main `packages/modules/Connectivity/bpf/progs/netd.h`
+  checks `uid % AID_USER_OFFSET < AID_APP_START`. Any other uid gets **dropped**
+  (connect hangs) whenever an allowlist chain is on: restricted networking mode,
+  doze, powersave. On the test device `restricted_networking_mode=1` blocked uid
+  20000 and every uid ≥ 10000 tested, while 0/2000/9999 worked. Main also defines
+  `AID_SDK_SANDBOX_PROCESS_START 20000`. `android_filesystem_config.h` (12 and main)
+  defines nothing in 8000–9996. The reserved ranges end at
+  `AID_SYSTEM_EXT_RESERVED_END 7999`, then come `AID_EVERYBODY 9997`, `AID_MISC 9998`
+  and `AID_NOBODY 9999`. OEM `config.fs` AIDs must sit in the reserved ranges.
+  `setup.sh` warns for a `--uid` or an existing user outside 8000–9996.
 - `enter.sh` uses `env -i`. The root shell goes through `setpriv --init-groups` so it
   gets the `aid_*` supplementary groups. Users go through `su -w UBU_CWD,UBU_INIT,COLORTERM - user`.
   `UBU_CWD` / `UBU_INIT` are applied (then unset) by `/etc/profile.d/uburoot.sh`. This
@@ -164,7 +183,7 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Phase 1 result: shellcheck clean (15 files),
+- `tests/run-all.sh`: everything below. Phase 1 result: shellcheck clean (17 files),
   guard 13/13, Docker 70/70.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
@@ -179,10 +198,19 @@ directories as a fallback.
   umount makes reset abort with the dummy "phone data" intact. It also checks that
   reset `--kill`s a live chroot session.
 - `tools/adb-push-scripts.sh`: pushes the scripts to a device for `adb shell su -M -c` tests.
+- `tests/device/run.sh [--reset] [-s SERIAL]`: pushes the scripts and runs
+  `tests/device/checks.sh` on a rooted phone (under nohup, logging to
+  `/data/local/tmp/uburoot-device-tests.log`). It needs `install.sh` and
+  `setup.sh --user tester --nopasswd` to have run already. It covers real mounts and
+  propagation, paranoid network, bionic wrappers, the user's sudo/network/`/sdcard`
+  access, a sabotaged reset and umount back to baseline. `--reset` also runs the real
+  reset with a live session. Not part of `run-all.sh`.
+- Ubuntu 26.04's rust-coreutils (`env` etc.) **panics without `/proc`** (rustix reads
+  `/proc/self/auxv`). Never `chroot` into the rootfs before `mount.sh`.
 - Paths not covered by the suite: the toybox-only fallback (no root manager ships without
   busybox) and plain util-linux.
-- Not covered without a device: real paranoid-network kernel, real
-  Magisk/KSU/APatch `su`, bionic binaries inside the chroot, FUSE `/sdcard`.
+- Tested only on Magisk 31.1 / Android 12 so far. KernelSU, APatch and Android 13+
+  have not been run on a device yet.
 
 ## Work rules
 

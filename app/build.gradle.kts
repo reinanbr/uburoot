@@ -23,15 +23,20 @@ android {
     }
 
     // Release signing comes from the environment (CI secrets), never from the
-    // repo. Without UBUROOT_KEYSTORE the release APK is left unsigned.
-    val keystore = providers.environmentVariable("UBUROOT_KEYSTORE").orNull?.let(::file)
-    if (keystore != null && keystore.isFile) {
+    // repo. Unless all four variables are set, the release APK is left unsigned
+    // (and CI's release job refuses to publish it).
+    fun env(name: String) = providers.environmentVariable(name).orNull?.takeIf { it.isNotEmpty() }
+    val keystore = env("UBUROOT_KEYSTORE")?.let(::file)?.takeIf { it.isFile }
+    val storePass = env("UBUROOT_KEYSTORE_PASSWORD")
+    val alias = env("UBUROOT_KEY_ALIAS")
+    val keyPass = env("UBUROOT_KEY_PASSWORD")
+    if (keystore != null && storePass != null && alias != null && keyPass != null) {
         signingConfigs {
             create("release") {
                 storeFile = keystore
-                storePassword = providers.environmentVariable("UBUROOT_KEYSTORE_PASSWORD").get()
-                keyAlias = providers.environmentVariable("UBUROOT_KEY_ALIAS").get()
-                keyPassword = providers.environmentVariable("UBUROOT_KEY_PASSWORD").get()
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
             }
         }
     }

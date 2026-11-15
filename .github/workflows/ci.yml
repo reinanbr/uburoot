@@ -42,6 +42,11 @@ jobs:
     name: APK + root module
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Job-wide, so every Gradle invocation sees the same signing setup.
+    env:
+      UBUROOT_KEYSTORE_PASSWORD: ${{ secrets.UBUROOT_KEYSTORE_PASSWORD }}
+      UBUROOT_KEY_ALIAS: ${{ secrets.UBUROOT_KEY_ALIAS }}
+      UBUROOT_KEY_PASSWORD: ${{ secrets.UBUROOT_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v7
 
@@ -67,10 +72,6 @@ jobs:
         run: ./gradlew spotlessCheck
 
       - name: Build and unit tests
-        env:
-          UBUROOT_KEYSTORE_PASSWORD: ${{ secrets.UBUROOT_KEYSTORE_PASSWORD }}
-          UBUROOT_KEY_ALIAS: ${{ secrets.UBUROOT_KEY_ALIAS }}
-          UBUROOT_KEY_PASSWORD: ${{ secrets.UBUROOT_KEY_PASSWORD }}
         run: ./gradlew assembleDebug assembleRelease testDebugUnitTest
 
       - name: Package APK + module zip

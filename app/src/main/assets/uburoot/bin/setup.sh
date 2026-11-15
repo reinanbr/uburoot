@@ -2,7 +2,7 @@
 # Post-install configuration of the Ubuntu rootfs. Safe to re-run.
 # Usage: setup.sh [options]
 #   --user NAME        create this user (with sudo)
-#   --uid N            UID/GID for the user (default 9000, must be < 10000; see CLAUDE.md)
+#   --uid N            UID/GID for the user (default: first free from 9000; must be < 10000, see CLAUDE.md)
 #   --nopasswd         passwordless sudo for the user
 #   --password-stdin   read the user's password from the first line of stdin
 #   --dns "A B"        DNS servers (default: DNS_SERVERS from config)
@@ -20,7 +20,7 @@ ubu_rootfs_installed || ubu_die "no Ubuntu rootfs at $ROOTFS (run install.sh fir
 
 R=$ROOTFS
 NEW_USER=""
-NEW_UID=9000
+NEW_UID=""
 NOPASSWD=0
 PASSWORD_STDIN=0
 DNS=$DNS_SERVERS
@@ -50,10 +50,12 @@ if [ -n "$NEW_USER" ]; then
     case "$NEW_USER" in
         *[!a-z0-9_-]*) ubu_die "invalid user name: $NEW_USER" ;;
     esac
-    case "$NEW_UID" in
-        '' | *[!0-9]*) ubu_die "invalid uid: $NEW_UID" ;;
-    esac
-    [ "$NEW_UID" -ge 1000 ] || ubu_die "uid must be >= 1000"
+    if [ -n "$NEW_UID" ]; then
+        case "$NEW_UID" in
+            *[!0-9]*) ubu_die "invalid uid: $NEW_UID" ;;
+        esac
+        [ "$NEW_UID" -ge 1000 ] || ubu_die "uid must be >= 1000"
+    fi
 fi
 case "$HOST" in
     '' | *[!a-zA-Z0-9-]*) ubu_die "invalid hostname: $HOST" ;;
@@ -191,15 +193,30 @@ ubu_uid_ok() {
     case "$1" in '' | *[!0-9]*) return 1 ;; esac
     [ "$1" -ge 8000 ] && [ "$1" -le 9996 ]
 }
+# First id >= 9000 that is free both as a uid and as a gid.
+ubu_free_id() {
+    _id=9000
+    while [ "$_id" -le 9996 ]; do
+        if ! bb awk -F: -v i="$_id" '$3 == i { f = 1 } END { exit !f }' "$R/etc/passwd" "$R/etc/group"; then
+            printf '%s' "$_id"
+            return 0
+        fi
+        _id=$((_id + 1))
+    done
+    return 1
+}
 if [ -n "$NEW_USER" ]; then
-    ubu_uid_ok "$NEW_UID" ||
-        ubu_warn "uid $NEW_UID is outside 8000-9996: network may be blocked or it may clash with an Android AID"
     if grep -q "^$NEW_USER:" "$R/etc/passwd"; then
         ubu_log "user $NEW_USER already exists"
         _cur=$(bb awk -F: -v u="$NEW_USER" '$1 == u { print $3; exit }' "$R/etc/passwd")
         ubu_uid_ok "$_cur" ||
             ubu_warn "existing user $NEW_USER has uid $_cur (outside 8000-9996); network may be blocked"
     else
+        if [ -z "$NEW_UID" ]; then
+            NEW_UID=$(ubu_free_id) || ubu_die "no free uid/gid in 9000-9996"
+        fi
+        ubu_uid_ok "$NEW_UID" ||
+            ubu_warn "uid $NEW_UID is outside 8000-9996: network may be blocked or it may clash with an Android AID"
         if ! grep -q "^$NEW_USER:" "$R/etc/group"; then
             in_chroot groupadd -g "$NEW_UID" "$NEW_USER" || ubu_die "groupadd $NEW_USER failed"
         fi

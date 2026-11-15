@@ -46,6 +46,14 @@ if [ -n "$BB" ] && [ "$BB_KIND" = busybox ]; then
 else
     set -- chroot "$R"
 fi
+# Magisk's su hands the root process our tty but setsid()s it without making
+# it the controlling terminal (seen on a device: tty_nr=0 while fd 0 is the
+# terminal's pts). bash then has no job control, and Ctrl+C goes to the su
+# client's process group. util-linux setsid --ctty starts a new session and
+# takes the tty over (TIOCSCTTY with force, allowed for root).
+if [ -t 0 ] && [ -x "$R/usr/bin/setsid" ]; then
+    set -- "$@" /usr/bin/setsid --ctty --wait
+fi
 set -- "$@" /usr/bin/env -i \
     TERM=xterm-256color COLORTERM=truecolor LANG=C.UTF-8 PATH="$_path" \
     UBU_CWD="$_cwd" UBU_INIT="$_init"

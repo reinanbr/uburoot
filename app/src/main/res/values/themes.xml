@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Platform theme: Compose draws everything, so no AppCompat dependency. -->
+    <style name="Theme.UbuRoot" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.UbuRoot.Terminal" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+</resources>

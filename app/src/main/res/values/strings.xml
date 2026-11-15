@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">UbuRoot</string>
+
+    <string name="checking_root">Verificando acesso root…</string>
+    <string name="action_retry">Tentar novamente</string>
+    <string name="action_install">Instalar</string>
+    <string name="action_setup">Configurar</string>
+
+    <string name="problem_no_root_title">Sem acesso root</string>
+    <string name="problem_no_root_body">O UbuRoot precisa de root (Magisk, KernelSU ou APatch). Conceda o acesso no gerenciador de root e toque em Tentar novamente.</string>
+    <string name="problem_namespace_title">Namespace de montagem isolado</string>
+    <string name="problem_namespace_body">O shell root não está no namespace de montagem global, então as montagens do Ubuntu não seriam visíveis entre as sessões. No Magisk, ajuste o modo de namespace de montagem para Global; no KernelSU, use o namespace global no perfil do app; no APatch, habilite o namespace global.</string>
+    <string name="problem_arch_title">Arquitetura não suportada</string>
+    <string name="problem_arch_body">O UbuRoot só funciona em dispositivos arm64 (aarch64).</string>
+    <string name="problem_space_title">Pouco espaço livre</string>
+    <string name="problem_space_body">São necessários pelo menos 3 GB livres em /data para instalar o Ubuntu.</string>
+    <string name="problem_deploy_title">Falha ao copiar os scripts</string>
+    <string name="problem_deploy_body">Não foi possível copiar os scripts para /data/local/uburoot/bin.</string>
+
+    <string name="info_root">Root</string>
+    <string name="info_busybox">BusyBox</string>
+    <string name="info_arch">Arquitetura</string>
+    <string name="info_free">Espaço livre</string>
+    <string name="info_namespace">Namespace</string>
+    <string name="namespace_global">global</string>
+    <string name="namespace_private">isolado</string>
+    <string name="warning_no_busybox">Nenhum BusyBox encontrado; os comandos do toybox serão usados.</string>
+
+    <string name="form_intro">O Ubuntu Base LTS mais recente para arm64 será baixado de cdimage.ubuntu.com (cerca de 35 MB), verificado por SHA256 e instalado em /data/local/uburoot.</string>
+    <string name="form_intro_setup_only">O Ubuntu já está instalado, mas a configuração não terminou. Escolha o usuário para concluir.</string>
+    <string name="form_user">Usuário do Ubuntu</string>
+    <string name="form_user_hint">Letras minúsculas, números, _ e -</string>
+    <string name="form_password">Senha (opcional)</string>
+    <string name="form_password_hint">Em branco: conta bloqueada para senha (sudo só com “sudo sem senha”)</string>
+    <string name="form_nopasswd">sudo sem senha</string>
+
+    <string name="step_discover">Procurando a versão mais recente…</string>
+    <string name="step_download">Baixando o Ubuntu Base…</string>
+    <string name="step_extract">Verificando e extraindo…</string>
+    <string name="step_setup">Configurando o Ubuntu (apt, sudo, usuário)…</string>
+    <string name="install_failed">A instalação falhou</string>
+
+</resources>

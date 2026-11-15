@@ -21,3 +21,4 @@ if [ -d "$UBU_BASE" ]; then
     printf 'free_kb=%s\n' "$(bb df -Pk "$UBU_BASE" | bb awk 'NR == 2 { print $4 }')"
 fi
 if ubu_rootfs_installed; then printf 'rootfs=installed\n'; else printf 'rootfs=absent\n'; fi
+if [ -f "$ROOTFS/etc/uburoot-setup.done" ]; then printf 'setup=done\n'; else printf 'setup=pending\n'; fi

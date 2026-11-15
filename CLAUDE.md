@@ -13,7 +13,7 @@ Play Core, or any proprietary Google dependency.
 | Phase | Scope | Status |
 |------:|-------|--------|
 | 1 | Shell scripts + shellcheck + critical-rule tests | done (Docker 70/70; device 53/53 on Magisk, LineageOS 19.1 / Android 12) |
-| 2 | App MVP: root check, installer, one terminal session | todo |
+| 2 | App MVP: root check, installer, one terminal session | done (unit 17/17; on device: clean install discover→download→SHA256→extract→setup→terminal, resume after a kill, apt as the user; device suite 59/59 incl. real reset) |
 | 3 | Multiple sessions, foreground service, extra keys, settings | todo |
 | 4 | Android integration (receiver, `uburoot-*` commands) | todo |
 | 5 | Boot module (Magisk/KSU/APatch zip) | todo |
@@ -111,6 +111,54 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
   "Reparar mounts" (`umount.sh` + `mount.sh`).
 - `/dev` is the real Android `/dev`. Creating `dev/shm` or `dev/fd` there creates them
   on the device's `/dev` tmpfs (harmless, lost at reboot).
+
+## App (Phase 2)
+
+Build: AGP 9.5.1 with **built-in Kotlin** (never apply `org.jetbrains.kotlin.android`;
+only `org.jetbrains.kotlin.plugin.compose`), Kotlin 2.4.21, Gradle wrapper 9.9.1
+(AGP 9.5 needs >= 9.6.0), compile/targetSdk 37, Compose BOM 2026.09.00, termux
+`v0.118.3` (newer tags are betas), libsu 6.0.0. Versions were checked against
+maven-metadata.xml / JitPack on 2026-11-15. Gradle needs a JDK with `javac`: on the
+dev machine the default `java-25` is a JRE, so build with
+`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew assembleDebug testDebugUnitTest`.
+
+| File (`app/src/main/java/com/reinanbr/uburoot/`) | Role |
+|------|------|
+| `UbuRootApp` | libsu default builder: `FLAG_MOUNT_MASTER` |
+| `root/RootShell` | coroutine wrapper. Every command runs as `( cmd ) 2>&1`: a subshell, so `set -e`/`exit` can't kill libsu's shared shell |
+| `root/ScriptDeployer` | assets → `/data/local/uburoot/bin`, replaced via temp file + `mv` (a running sh reads its script incrementally); `rootinfo.sh` |
+| `root/RootInfo` | parses `rootinfo.sh` (`setup=done|pending` added for resuming installs) |
+| `install/ReleaseDiscovery` | newest LTS from the cdimage listing (+ fallback to an older series without arm64), SHA256SUMS |
+| `install/Downloader` | resumable (`Range`, restarts if the server answers 200, re-fetches once on checksum mismatch), `.part` → rename after SHA256 |
+| `install/UbuConfig` | renders `uburoot.conf`, every value single-quoted (it is sourced as root) |
+| `install/InstallViewModel` | preflight → form → discover/download/`install.sh`/config/`setup.sh` → terminal |
+| `terminal/*` | one `TerminalSession` (`su --mount-master -c /data/local/uburoot/bin/enter.sh`, app env + `TERM`), kept in `SessionHolder` across activity recreation |
+
+- libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
+  (`BuilderImpl`). So preflight compares `mnt_ns` with `init_mnt_ns` and refuses if they
+  differ. libsu also caches the main shell: after a denial the cache holds the `sh`
+  fallback, so `RootShell.isRoot()` closes a cached non-root shell before retrying.
+- Magisk on the test device rejected the app's `su` **without showing a prompt**
+  (`su: request rejected (10121)` in logcat, no `SuRequest` activity started). Settings
+  were default (prompt) and app and daemon were both 31.1. Root was granted with
+  `magisk --sqlite "INSERT OR REPLACE INTO policies ... VALUES(<uid>,2,0,1,1)"`. The
+  cause is unknown.
+- **Controlling TTY:** Magisk's `su` passes the terminal's pts straight to the root
+  process but `setsid()`s it without making the pts its controlling terminal
+  (`tty_nr=0`). bash then says "no job control", and Ctrl+C reaches the su client's
+  process group instead. `enter.sh` therefore runs `setsid --ctty --wait` (util-linux:
+  `setsid()` then `ioctl(0, TIOCSCTTY, 1)`, a forced steal, allowed for root) when stdin
+  is a tty. Verified via `/proc/<pid>/stat`: bash is session leader of the pts and the
+  foreground job owns `tpgid`. Not covered by the suites, which have no tty.
+- Recovery: a run killed after `install.sh` resumes as "rootfs installed, setup
+  pending" (the atomic `rootfs.partial` rename makes that safe), and preflight deletes
+  a leftover tarball. When the session ends, Enter goes back through `MainActivity`
+  (preflight), never straight into `enter.sh` (the rootfs may have been reset).
+- User names: `[a-z_][a-z0-9_-]{0,31}`, minus the accounts that already exist in
+  Ubuntu Base (`setup.sh` would reuse them and grant sudo). Without `--uid`, `setup.sh`
+  takes the first id >= 9000 that is free as both uid and gid.
+- UI strings in pt-BR in `values/strings.xml` (CLAUDE.md work rule; `prompt.md` says
+  English, and this file wins). No Ubuntu logo: the icon is a plain `>_` prompt.
 
 ## Root implementations and mount namespaces (verified in source, 2026-11)
 

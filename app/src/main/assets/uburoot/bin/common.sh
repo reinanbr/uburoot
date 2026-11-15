@@ -13,6 +13,7 @@ ROOTFS="${ROOTFS:-$UBU_BASE/rootfs}"
 UBU_CONFIG="${UBU_CONFIG:-$UBU_BASE/uburoot.conf}"
 UBU_MOUNTS_FILE="${UBU_MOUNTS_FILE:-/proc/self/mounts}"
 UBU_MOUNTINFO_FILE="${UBU_MOUNTINFO_FILE:-/proc/self/mountinfo}"
+UBU_INOTIFY_FILE="${UBU_INOTIFY_FILE:-/proc/sys/fs/inotify/max_user_watches}"
 
 # Directories inside the rootfs that only ever serve as bind-mount targets.
 # They must be empty (rmdir-able) before the rootfs may be deleted.
@@ -45,6 +46,7 @@ ubu_load_config() {
     INIT_COMMAND=""
     UBU_HOSTNAME="uburoot"
     SDCARD_SOURCE=""
+    INOTIFY_MAX_WATCHES=524288
     if [ -f "$UBU_CONFIG" ]; then
         # shellcheck source=/dev/null
         . "$UBU_CONFIG"

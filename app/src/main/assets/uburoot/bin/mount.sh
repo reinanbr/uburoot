@@ -114,4 +114,28 @@ else
     done
 fi
 
+# 4) inotify watches [INOTIFY_MAX_WATCHES] for IDEs, file watchers and
+#    webpack (Android's default, 8192, is far too low for VS Code). This is a
+#    global kernel setting shared with Android, so it is only ever raised,
+#    never lowered; 0 leaves it alone. Reset by a reboot.
+case "$INOTIFY_MAX_WATCHES" in
+    '' | *[!0-9]*) ubu_warn "invalid INOTIFY_MAX_WATCHES: $INOTIFY_MAX_WATCHES" ;;
+    0) ;;
+    *)
+        _cur=$(cat "$UBU_INOTIFY_FILE" 2>/dev/null) || _cur=""
+        case "$_cur" in
+            '' | *[!0-9]*) ubu_warn "cannot read $UBU_INOTIFY_FILE" ;;
+            *)
+                if [ "$_cur" -lt "$INOTIFY_MAX_WATCHES" ]; then
+                    if echo "$INOTIFY_MAX_WATCHES" >"$UBU_INOTIFY_FILE" 2>/dev/null; then
+                        ubu_log "inotify max_user_watches: $_cur -> $INOTIFY_MAX_WATCHES"
+                    else
+                        ubu_warn "cannot raise inotify max_user_watches ($_cur)"
+                    fi
+                fi
+                ;;
+        esac
+        ;;
+esac
+
 exit 0

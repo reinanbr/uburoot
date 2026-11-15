@@ -112,6 +112,13 @@ chmod 755 "$R/usr/sbin/policy-rc.d"
 ubu_ensure_profile_hook "$R" || ubu_warn "could not write profile hook"
 
 # --- Android paranoid-network groups --------------------------------------
+# On Android kernels (CONFIG_ANDROID_PARANOID_NETWORK) these groups are more
+# than socket permissions: membership in aid_net_raw acts as CAP_NET_RAW and
+# aid_net_admin as CAP_NET_ADMIN. Seen on a device: a user in them could
+# tcpdump the whole phone's traffic and add links in the host netns without
+# sudo. So only root gets them; the user and _apt get aid_inet (sockets) only.
+# Ping needs neither: Android's init.rc sets ping_group_range to all gids.
+# Opt in by hand with: sudo usermod -aG aid_net_raw,aid_net_admin <user>
 # Prints the group name that owns GID $2 (creating $1 with that GID if needed).
 ensure_group() {
     _owner=$(bb awk -F: -v g="$2" '$3 == g { print $1; exit }' "$R/etc/group")
@@ -126,7 +133,13 @@ G_INET=$(ensure_group aid_inet 3003) || ubu_die "cannot create group aid_inet"
 G_RAW=$(ensure_group aid_net_raw 3004) || ubu_die "cannot create group aid_net_raw"
 G_ADMIN=$(ensure_group aid_net_admin 3005) || ubu_die "cannot create group aid_net_admin"
 AID_GROUPS="$G_INET,$G_RAW,$G_ADMIN"
-ubu_log "network groups: $AID_GROUPS"
+ubu_log "network groups: $AID_GROUPS (root), $G_INET (users)"
+# Removes $1 from group $2 if it is a member (older setups added it).
+drop_from_group() {
+    if bb awk -F: -v g="$2" -v u="$1" '$1 == g { n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] == u) f = 1 } END { exit !f }' "$R/etc/group"; then
+        in_chroot gpasswd -d "$1" "$2" >/dev/null && ubu_log "removed $1 from $2"
+    fi
+}
 # /sdcard is usually /data/media/0 (media_rw:media_rw 2770); see mount.sh.
 G_MEDIA=$(ensure_group aid_media_rw 1023) || ubu_die "cannot create group aid_media_rw"
 
@@ -134,8 +147,42 @@ in_chroot usermod -a -G "$AID_GROUPS" root || ubu_warn "usermod root failed"
 if grep -q '^_apt:' "$R/etc/passwd"; then
     # APT drops privileges with setgroups(1, &pw_gid): only the PRIMARY group
     # survives, so _apt needs aid_inet as its primary group.
-    in_chroot usermod -g "$G_INET" -a -G "$AID_GROUPS" _apt || ubu_warn "usermod _apt failed"
+    in_chroot usermod -g "$G_INET" _apt || ubu_warn "usermod _apt failed"
+    drop_from_group _apt "$G_RAW"
+    drop_from_group _apt "$G_ADMIN"
 fi
+
+# --- iptables backend ---------------------------------------------------------
+# The chroot shares Android's network namespace, so iptables in Ubuntu edits
+# the phone's firewall. Ubuntu defaults to iptables-nft, but Android's netd
+# uses the legacy xtables (and kernels like 4.9 have no nf_tables at all), so
+# point iptables/ip6tables at whichever backend holds Android's tables. An apt
+# hook re-runs this after every dpkg run (iptables may be installed later);
+# a choice the user made by hand (manual mode) is left alone.
+mkdir -p "$R/usr/local/sbin"
+cat >"$R/usr/local/sbin/uburoot-iptables-select" <<'EOF'
+#!/bin/sh
+# UbuRoot: use the iptables backend that holds Android's rules (see setup.sh).
+for t in iptables ip6tables; do
+    [ -x "/usr/sbin/$t-legacy" ] || continue
+    case "$t" in
+        iptables) names=/proc/net/ip_tables_names ;;
+        *) names=/proc/net/ip6_tables_names ;;
+    esac
+    # /proc files report size 0, so read them. Empty: Android is not on legacy.
+    [ -n "$(cat "$names" 2>/dev/null)" ] || continue
+    update-alternatives --query "$t" 2>/dev/null | grep -qx 'Status: auto' || continue
+    update-alternatives --set "$t" "/usr/sbin/$t-legacy" >/dev/null &&
+        echo "uburoot: $t -> $t-legacy (Android's tables; rules apply to the whole phone)"
+done
+exit 0
+EOF
+chmod 755 "$R/usr/local/sbin/uburoot-iptables-select"
+cat >"$R/etc/apt/apt.conf.d/80uburoot-iptables" <<'EOF'
+// Written by UbuRoot setup.sh: keep iptables on Android's backend.
+DPkg::Post-Invoke { "if [ -x /usr/local/sbin/uburoot-iptables-select ]; then /usr/local/sbin/uburoot-iptables-select || true; fi"; };
+EOF
+in_chroot /usr/local/sbin/uburoot-iptables-select || ubu_warn "uburoot-iptables-select failed"
 
 # --- APT sources ---------------------------------------------------------------
 _osr="$R/usr/lib/os-release"
@@ -224,9 +271,11 @@ if [ -n "$NEW_USER" ]; then
             ubu_die "useradd $NEW_USER failed"
         ubu_log "created user $NEW_USER (uid $NEW_UID)"
     fi
-    _groups="$AID_GROUPS,$G_MEDIA"
+    _groups="$G_INET,$G_MEDIA"
     grep -q '^sudo:' "$R/etc/group" && _groups="sudo,$_groups"
     in_chroot usermod -a -G "$_groups" "$NEW_USER" || ubu_warn "usermod $NEW_USER failed"
+    drop_from_group "$NEW_USER" "$G_RAW"
+    drop_from_group "$NEW_USER" "$G_ADMIN"
     if [ -n "$USER_PW" ]; then
         printf '%s:%s\n' "$NEW_USER" "$USER_PW" | bb chroot "$R" /usr/bin/env -i \
             PATH="$CHROOT_PATH" chpasswd || ubu_warn "setting the password failed"

@@ -13,6 +13,8 @@ class UbuConfigTest {
         assertTrue(text.contains("DEFAULT_USER='ana'\n"))
         assertTrue(text.contains("MOUNT_SDCARD='1'\n"))
         assertTrue(text.contains("INIT_COMMAND='echo '\\''hi'\\''; cd /'\n"))
+        assertTrue(text.contains("INOTIFY_MAX_WATCHES='524288'\n"))
+        assertTrue(UbuConfig(inotifyMaxWatches = -5).render().contains("INOTIFY_MAX_WATCHES='0'\n"))
     }
 
     /** The scripts `. uburoot.conf`: sourcing it must only set variables. */

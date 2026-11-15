@@ -58,6 +58,10 @@ chmod 755 /data/local/uburoot/bin/*
 B=/data/local/uburoot/bin
 R=/data/local/uburoot/rootfs
 export UBU_ALLOW_ANY_ARCH=1 # container is x86_64; the app enforces arm64
+# mount.sh raises fs.inotify.max_user_watches; in a privileged container that
+# is the HOST's sysctl, so point it at a file.
+export UBU_INOTIFY_FILE=/tmp/inotify_max_user_watches
+echo 8192 >"$UBU_INOTIFY_FILE"
 
 section "control experiment: why rslave matters"
 mkdir -p /tmp/ctl && mount --rbind /apex /tmp/ctl
@@ -87,10 +91,31 @@ check "group aid_inet=3003" grep -q '^aid_inet:x:3003:' $R/etc/group
 check "group aid_net_raw=3004" grep -q '^aid_net_raw:x:3004:' $R/etc/group
 check "group aid_net_admin=3005" grep -q '^aid_net_admin:x:3005:' $R/etc/group
 check "_apt primary group is aid_inet" sh -c "awk -F: '\$1==\"_apt\"{exit \$4==3003?0:1}' $R/etc/passwd"
+# aid_net_raw/aid_net_admin act as CAP_NET_RAW/CAP_NET_ADMIN on Android kernels.
+not_member() { ! awk -F: -v g="$2" -v u="$1" '$1 == g { n = split($4, m, ","); for (i = 1; i <= n; i++) if (m[i] == u) f = 1 } END { exit !f }' $R/etc/group; }
+check "root in aid_net_raw and aid_net_admin" sh -c "grep -q '^aid_net_raw:.*root' $R/etc/group && grep -q '^aid_net_admin:.*root' $R/etc/group"
+for g in aid_net_raw aid_net_admin; do
+    check "tester not in $g" not_member tester $g
+    check "_apt not in $g" not_member _apt $g
+done
+check "tester in aid_inet and aid_media_rw" sh -c "id_g=\$(chroot $R id -Gn tester); echo \"\$id_g\" | grep -qw aid_inet && echo \"\$id_g\" | grep -qw aid_media_rw"
+check "apt hook for the iptables backend" test -x $R/usr/local/sbin/uburoot-iptables-select
+check "inotify watches raised (8192 -> 524288)" grep -qx 524288 "$UBU_INOTIFY_FILE"
 check "user tester uid 9000" sh -c "awk -F: '\$1==\"tester\"{exit \$3==9000?0:1}' $R/etc/passwd"
 check "sudo installed" chroot $R test -x /usr/bin/sudo
 check "NOPASSWD sudoers" grep -q 'tester ALL=(ALL:ALL) NOPASSWD: ALL' $R/etc/sudoers.d/90-uburoot-tester
+# Older setups put the user in aid_net_raw/aid_net_admin; a re-run drops them.
+chroot $R usermod -a -G aid_net_raw,aid_net_admin tester
 check "setup is re-runnable" sh -c "$B/setup.sh --user tester --nopasswd --no-apt"
+check "re-run removed tester from aid_net_raw/aid_net_admin" sh -c "! chroot $R id -Gn tester | grep -qE 'aid_net_(raw|admin)'"
+echo 1000000 >"$UBU_INOTIFY_FILE"
+$B/mount.sh 2>/dev/null
+check "inotify watches never lowered" grep -qx 1000000 "$UBU_INOTIFY_FILE"
+echo 100 >"$UBU_INOTIFY_FILE"
+echo "INOTIFY_MAX_WATCHES=0" >/data/local/uburoot/uburoot.conf
+$B/mount.sh 2>/dev/null
+check "INOTIFY_MAX_WATCHES=0 leaves it alone" grep -qx 100 "$UBU_INOTIFY_FILE"
+rm -f /data/local/uburoot/uburoot.conf
 
 section "mount.sh"
 n1=$(mounted_under $R)

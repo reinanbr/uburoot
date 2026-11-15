@@ -10,6 +10,8 @@ data class UbuConfig(
     val dnsServers: String = "1.1.1.1 9.9.9.9",
     val initCommand: String = "",
     val hostname: String = "uburoot",
+    /** Raised (never lowered) by mount.sh; global kernel setting. 0 = leave alone. */
+    val inotifyMaxWatches: Int = 524288,
 ) {
     /** Every value is single-quoted: the file is executed by a root shell. */
     fun render(): String = buildString {
@@ -20,6 +22,7 @@ data class UbuConfig(
         line("DEFAULT_USER", defaultUser)
         line("INIT_COMMAND", initCommand)
         line("UBU_HOSTNAME", hostname)
+        line("INOTIFY_MAX_WATCHES", inotifyMaxWatches.coerceAtLeast(0).toString())
     }
 
     private fun StringBuilder.line(key: String, value: String) {

@@ -1,6 +1,12 @@
 package com.reinanbr.uburoot.install
 
 import com.sun.net.httpserver.HttpServer
+import java.io.File
+import java.io.IOException
+import java.net.InetSocketAddress
+import java.security.MessageDigest
+import java.util.Collections
+import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -9,12 +15,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
-import java.io.File
-import java.io.IOException
-import java.net.InetSocketAddress
-import java.security.MessageDigest
-import java.util.Collections
-import kotlin.random.Random
 
 class DownloaderTest {
     private val body = Random(42).nextBytes(300_000)
@@ -57,7 +57,10 @@ class DownloaderTest {
         val dest = File(dir, "rootfs.tar.gz")
         File(dest.path + ".part").writeBytes(body.copyOf(100_000))
         var last = 0L
-        Downloader().download(url, dest, sha) { done, total -> last = done; assertEquals(body.size.toLong(), total) }
+        Downloader().download(url, dest, sha) { done, total ->
+            last = done
+            assertEquals(body.size.toLong(), total)
+        }
         assertEquals(listOf("bytes=100000-"), ranges.toList())
         assertArrayEquals(body, dest.readBytes())
         assertEquals(body.size.toLong(), last)

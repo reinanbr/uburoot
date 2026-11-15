@@ -17,12 +17,11 @@ object ReleaseDiscovery {
     private val SERIES_DIR = Regex("""^(\d{2})\.04$""")
 
     /** Two-digit years of the LTS series in the releases index, newest first. */
-    fun ltsSeries(indexHtml: String): List<Int> =
-        hrefs(indexHtml)
-            .mapNotNull { SERIES_DIR.matchEntire(lastSegment(it))?.groupValues?.get(1)?.toInt() }
-            .filter { it % 2 == 0 }
-            .distinct()
-            .sortedDescending()
+    fun ltsSeries(indexHtml: String): List<Int> = hrefs(indexHtml)
+        .mapNotNull { SERIES_DIR.matchEntire(lastSegment(it))?.groupValues?.get(1)?.toInt() }
+        .filter { it % 2 == 0 }
+        .distinct()
+        .sortedDescending()
 
     /** The newest arm64 tarball of series [yy] in a `YY.04/release/` listing. */
     fun arm64Tarball(listingHtml: String, yy: Int): Pair<String, String>? {
@@ -34,33 +33,31 @@ object ReleaseDiscovery {
     }
 
     /** SHA256SUMS lines look like `<hash> *<file>` (binary) or `<hash>  <file>`. */
-    fun sha256For(sums: String, fileName: String): String? =
-        sums.lineSequence()
-            .map { it.trim().split(Regex("\\s+"), limit = 2) }
-            .firstOrNull { it.size == 2 && it[1].removePrefix("*") == fileName }
-            ?.get(0)
-            ?.lowercase()
-            ?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
+    fun sha256For(sums: String, fileName: String): String? = sums.lineSequence()
+        .map { it.trim().split(Regex("\\s+"), limit = 2) }
+        .firstOrNull { it.size == 2 && it[1].removePrefix("*") == fileName }
+        ?.get(0)
+        ?.lowercase()
+        ?.takeIf { it.matches(Regex("[0-9a-f]{64}")) }
 
-    suspend fun discover(fetch: (String) -> String = Http::getText): UbuntuRelease =
-        withContext(Dispatchers.IO) {
-            val series = ltsSeries(fetch(BASE_URL))
-            if (series.isEmpty()) error("no LTS release found at $BASE_URL")
-            // A brand-new series directory may not have an arm64 build yet.
-            for (yy in series.take(3)) {
-                val dir = BASE_URL + "%02d.04/release/".format(yy)
-                val listing = try {
-                    fetch(dir)
-                } catch (e: HttpException) {
-                    if (e.code == 404) continue else throw e
-                }
-                val (file, version) = arm64Tarball(listing, yy) ?: continue
-                val sha = sha256For(fetch(dir + "SHA256SUMS"), file)
-                    ?: error("$file is not listed in ${dir}SHA256SUMS")
-                return@withContext UbuntuRelease(version, file, dir + file, sha)
+    suspend fun discover(fetch: (String) -> String = Http::getText): UbuntuRelease = withContext(Dispatchers.IO) {
+        val series = ltsSeries(fetch(BASE_URL))
+        if (series.isEmpty()) error("no LTS release found at $BASE_URL")
+        // A brand-new series directory may not have an arm64 build yet.
+        for (yy in series.take(3)) {
+            val dir = BASE_URL + "%02d.04/release/".format(yy)
+            val listing = try {
+                fetch(dir)
+            } catch (e: HttpException) {
+                if (e.code == 404) continue else throw e
             }
-            error("no arm64 Ubuntu Base tarball found for LTS series $series")
+            val (file, version) = arm64Tarball(listing, yy) ?: continue
+            val sha = sha256For(fetch(dir + "SHA256SUMS"), file)
+                ?: error("$file is not listed in ${dir}SHA256SUMS")
+            return@withContext UbuntuRelease(version, file, dir + file, sha)
         }
+        error("no arm64 Ubuntu Base tarball found for LTS series $series")
+    }
 
     private fun hrefs(html: String) = HREF.findAll(html).map { it.groupValues[1] }.toList()
 

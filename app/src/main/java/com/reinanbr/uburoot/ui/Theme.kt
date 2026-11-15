@@ -18,7 +18,9 @@ fun UbuRootTheme(content: @Composable () -> Unit) {
             val ctx = LocalContext.current
             if (dark) dynamicDarkColorScheme(ctx) else dynamicLightColorScheme(ctx)
         }
+
         dark -> darkColorScheme()
+
         else -> lightColorScheme()
     }
     MaterialTheme(colorScheme = scheme, content = content)

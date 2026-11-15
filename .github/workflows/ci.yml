@@ -63,6 +63,9 @@ jobs:
             echo "No release keystore: release APK stays unsigned and is not published."
           fi
 
+      - name: Kotlin lint (ktlint via Spotless)
+        run: ./gradlew spotlessCheck
+
       - name: Build and unit tests
         env:
           UBUROOT_KEYSTORE_PASSWORD: ${{ secrets.UBUROOT_KEYSTORE_PASSWORD }}

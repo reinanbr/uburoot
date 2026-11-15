@@ -1,10 +1,10 @@
 package com.reinanbr.uburoot.install
 
+import java.io.File
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 class UbuConfigTest {
     @Test
@@ -23,7 +23,13 @@ class UbuConfigTest {
         val cfg = UbuConfig(defaultUser = "ana", initCommand = "\$(touch /tmp/pwned) `id` 'x'", hostname = "h")
         val f = File.createTempFile("uburoot", ".conf").apply { writeText(cfg.render()) }
         try {
-            val p = ProcessBuilder("sh", "-c", ". \"$1\"; printf '%s|%s|%s' \"\$DEFAULT_USER\" \"\$INIT_COMMAND\" \"\$UBU_HOSTNAME\"", "sh", f.path).start()
+            val p = ProcessBuilder(
+                "sh",
+                "-c",
+                ". \"$1\"; printf '%s|%s|%s' \"\$DEFAULT_USER\" \"\$INIT_COMMAND\" \"\$UBU_HOSTNAME\"",
+                "sh",
+                f.path,
+            ).start()
             val out = p.inputStream.readBytes().decodeToString()
             assertEquals(0, p.waitFor())
             assertEquals("ana|${cfg.initCommand}|h", out)

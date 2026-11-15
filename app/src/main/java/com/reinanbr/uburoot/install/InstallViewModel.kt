@@ -8,6 +8,7 @@ import com.reinanbr.uburoot.root.RootShell
 import com.reinanbr.uburoot.root.ScriptDeployer
 import com.reinanbr.uburoot.root.Sh
 import com.reinanbr.uburoot.root.UbuPaths
+import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +17,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /** Why the app cannot continue; the UI maps each one to a message. */
 enum class Problem { NO_ROOT, NOT_GLOBAL_NAMESPACE, NOT_ARM64, NO_SPACE, DEPLOY_FAILED }
@@ -63,10 +63,14 @@ class InstallViewModel(app: Application) : AndroidViewModel(app) {
         if (info.rootfsInstalled) withContext(Dispatchers.IO) { downloadDir.deleteRecursively() }
         return when {
             !info.globalNamespace -> Stage.Blocked(Problem.NOT_GLOBAL_NAMESPACE, info)
+
             !info.isArm64 -> Stage.Blocked(Problem.NOT_ARM64, info, info.arch)
+
             info.rootfsInstalled && info.setupDone -> Stage.Ready
+
             !info.rootfsInstalled && (info.freeBytes ?: Long.MAX_VALUE) < MIN_FREE_BYTES ->
                 Stage.Blocked(Problem.NO_SPACE, info)
+
             else -> Stage.Form(info)
         }
     }

@@ -99,7 +99,11 @@ private fun Blocked(stage: Stage.Blocked, onRetry: () -> Unit) {
         Modifier.verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
+        Text(
+            stringResource(title),
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.error,
+        )
         Text(stringResource(body))
         stage.info?.let { RootInfoCard(it) }
         if (stage.detail.isNotEmpty()) Mono(stage.detail)
@@ -207,7 +211,11 @@ private fun Working(stage: Stage.Working, log: List<String>) {
 
 @Composable
 private fun Failed(stage: Stage.Failed, log: List<String>, onRetry: () -> Unit) {
-    Text(stringResource(R.string.install_failed), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.error)
+    Text(
+        stringResource(R.string.install_failed),
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.error,
+    )
     Text(stage.message)
     Button(onClick = onRetry) { Text(stringResource(R.string.action_retry)) }
     LogView(log)

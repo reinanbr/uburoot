@@ -14,7 +14,10 @@ class ShTest {
 
     @Test
     fun quotesHostileStrings() {
-        for (s in listOf("plain", "it's", "'", "''", "\$(id)", "`id`", "a b\tc", "x\ny", "\\", "-n", "; rm -rf /", "\"\$HOME\"")) {
+        val hostile = listOf(
+            "plain", "it's", "'", "''", "\$(id)", "`id`", "a b\tc", "x\ny", "\\", "-n", "; rm -rf /", "\"\$HOME\"",
+        )
+        for (s in hostile) {
             assertEquals(s, shEcho(s))
         }
     }

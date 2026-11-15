@@ -8,13 +8,12 @@ internal object Http {
     // Generic client name: no device or user details leave the phone.
     const val USER_AGENT = "UbuRoot"
 
-    fun open(url: String): HttpURLConnection =
-        (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 20_000
-            readTimeout = 30_000
-            instanceFollowRedirects = true
-            setRequestProperty("User-Agent", USER_AGENT)
-        }
+    fun open(url: String): HttpURLConnection = (URL(url).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 20_000
+        readTimeout = 30_000
+        instanceFollowRedirects = true
+        setRequestProperty("User-Agent", USER_AGENT)
+    }
 
     fun getText(url: String): String {
         val c = open(url)

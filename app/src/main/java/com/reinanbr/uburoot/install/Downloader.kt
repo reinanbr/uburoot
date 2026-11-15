@@ -1,14 +1,14 @@
 package com.reinanbr.uburoot.install
 
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.security.MessageDigest
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withContext
 
 /**
  * Resumable HTTP download: bytes go to `<dest>.part`, a later call continues
@@ -48,11 +48,15 @@ class Downloader(private val open: (String) -> HttpURLConnection = Http::open) {
             val total = when (c.responseCode) {
                 HttpURLConnection.HTTP_PARTIAL ->
                     c.getHeaderField("Content-Range")?.substringAfterLast('/')?.toLongOrNull() ?: -1L
+
                 HttpURLConnection.HTTP_OK -> {
                     have = 0 // server ignored the Range header: start over
                     c.contentLengthLong
                 }
-                416 -> return // nothing left to fetch; the checksum decides
+
+                416 -> return
+
+                // nothing left to fetch; the checksum decides
                 else -> throw HttpException(c.responseCode, url)
             }
             c.inputStream.use { input ->

@@ -1,9 +1,9 @@
 package com.reinanbr.uburoot.root
 
 import android.content.Context
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 
 /** Copies assets/uburoot/bin to /data/local/uburoot/bin (root-owned, 0755). */
 object ScriptDeployer {

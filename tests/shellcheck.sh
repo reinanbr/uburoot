@@ -3,7 +3,9 @@
 # Uses shellcheck from PATH; otherwise the official koalaman/shellcheck image.
 set -eu
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-SC_IMAGE=koalaman/shellcheck:v0.11.0
+# CI runners have their own shellcheck (0.9.0 on ubuntu-24.04); match it with
+# SC_IMAGE=koalaman/shellcheck:v0.9.0 tests/shellcheck.sh
+SC_IMAGE=${SC_IMAGE:-koalaman/shellcheck:v0.11.0}
 cd "$ROOT"
 set -- app/src/main/assets/uburoot/bin/*.sh app/src/main/assets/uburoot/bin/android-env \
     tests/*.sh tests/docker/*.sh tests/device/*.sh tools/*.sh \

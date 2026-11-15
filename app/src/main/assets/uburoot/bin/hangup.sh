@@ -28,7 +28,9 @@ _dev=$(bb stat -L -c '%t %T' "/proc/$_pid/fd/0" 2>/dev/null) || ubu_die "cannot 
 _maj=$(printf '%d' "0x${_dev% *}")
 _min=$(printf '%d' "0x${_dev#* }")
 # Unix98 pty slaves: majors 136..143 (Documentation/admin-guide/devices.txt).
-[ "$_maj" -ge 136 ] && [ "$_maj" -le 143 ] || ubu_die "stdin of $_pid is not a pty"
+if [ "$_maj" -lt 136 ] || [ "$_maj" -gt 143 ]; then
+    ubu_die "stdin of $_pid is not a pty"
+fi
 # tty_nr as /proc/PID/stat encodes it (new_encode_dev).
 _nr=$(((_maj << 8) | (_min & 255) | ((_min >> 8) << 20)))
 

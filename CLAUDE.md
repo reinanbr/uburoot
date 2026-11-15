@@ -161,8 +161,10 @@ dev machine the default `java-25` is a JRE, so build with
 - User names: `[a-z_][a-z0-9_-]{0,31}`, minus the accounts that already exist in
   Ubuntu Base (`setup.sh` would reuse them and grant sudo). Without `--uid`, `setup.sh`
   takes the first id >= 9000 that is free as both uid and gid.
-- UI strings in pt-BR in `values/strings.xml` (CLAUDE.md work rule; `prompt.md` says
-  English, and this file wins). No Ubuntu logo: the icon is a plain `>_` prompt.
+- UI strings: English by default in `values/strings.xml` (as `prompt.md` asks, for F-Droid
+  and community translations), Brazilian Portuguese in `values-pt-rBR/strings.xml`.
+  Every new string goes into both. The reset confirmation word is a string too: `DELETE`
+  in English, `APAGAR` in pt-BR. No Ubuntu logo: the icon is a plain `>_` prompt.
 
 ## One file: APK + root module + Magisk recovery zip
 
@@ -194,6 +196,9 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   `module_installer.sh` does.
 
 ## Root implementations and mount namespaces (verified in source, 2026-11)
+
+User-facing version: [docs/ROOT_IMPLEMENTATIONS.md](docs/ROOT_IMPLEMENTATIONS.md) (keep both
+in sync).
 
 Mounts must be visible in every session. So every `su` call from the app must run in
 the **global (init) mount namespace**.
@@ -375,7 +380,7 @@ directories as a fallback.
 download-artifact v8):
 - `scripts`: `tests/shellcheck.sh`, `tests/test_reset_guard.sh`, `tests/docker/run.sh`
   (privileged Docker works on GitHub's ubuntu runners).
-- `build`: JDK 21, `assembleDebug assembleRelease testDebugUnitTest`, then
+- `build`: JDK 21, `spotlessCheck` (ktlint), `assembleDebug assembleRelease testDebugUnitTest`, then
   `tools/ci-package.sh dist` → `uburoot-<ver>[-g<sha>]-{debug,release}.apk`, the same
   bytes as `-module.zip`, and `SHA256SUMS`. The script fails unless each APK passes
   `apksigner verify` and carries `module.prop` (version filled in), `customize.sh`,
@@ -398,7 +403,13 @@ download-artifact v8):
 
 ## Work rules
 
-- Code and comments in English; UI strings in pt-BR via `strings.xml`.
+- Code, comments and docs in English; UI strings in English (`values/`) with the pt-BR
+  translation in `values-pt-rBR/`.
+- Kotlin style: ktlint 1.8.0 through Spotless 8.11.0 (`./gradlew spotlessApply`;
+  CI runs `spotlessCheck`). Rules in `.editorconfig` (android_studio style, 120 columns,
+  trailing commas kept: the two `ij_kotlin_allow_trailing_comma*` keys are also passed
+  as `editorConfigOverride` in `build.gradle.kts`, because with them only in
+  `.editorconfig` the commas were stripped).
 - Don't invent flags/APIs/versions: verify in the source first and note it here.
 - Minimal deps: no Hilt/Room/Retrofit. Terminal: `com.github.termux.termux-app:terminal-view`
   + `terminal-emulator` (JitPack, check the latest stable tag). Root: `com.github.topjohnwu.libsu:core`.

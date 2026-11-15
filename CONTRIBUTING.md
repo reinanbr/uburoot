@@ -34,9 +34,10 @@ Ground rules:
    analytics. Keep dependencies minimal: no Hilt, Room or Retrofit.
 4. **Don't guess flags, APIs or versions.** Check them in the source or the docs, and note
    what you checked in CLAUDE.md.
-5. Code, comments, commit messages and docs are in English. The default UI strings are
-   currently Brazilian Portuguese (`res/values/strings.xml`). Translations are welcome as
-   `values-<lang>/strings.xml`.
+5. Code, comments, commit messages, docs and the default UI strings
+   (`res/values/strings.xml`) are in English. Translations are welcome as
+   `values-<lang>/strings.xml`; Brazilian Portuguese (`values-pt-rBR`) is kept complete,
+   so add new strings there too.
 
 ## Development setup
 
@@ -45,6 +46,7 @@ Ground rules:
 - Optional: a rooted arm64 phone with adb.
 
 ```sh
+./gradlew spotlessApply                     # format Kotlin (ktlint; CI runs spotlessCheck)
 ./gradlew assembleDebug testDebugUnitTest   # app + unit tests
 tests/run-all.sh                            # shellcheck, reset guard, Docker suite
 tools/adb-push-scripts.sh                   # push the scripts to a phone

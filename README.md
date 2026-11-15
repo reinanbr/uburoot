@@ -45,7 +45,8 @@ names, so install either one. All versions and release notes are on the
 </p>
 
 *Setup, installing, the terminal with a development toolchain, and Android's own commands
-from Ubuntu. The UI is currently in Brazilian Portuguese.*
+from Ubuntu. The UI is in English and follows the system language; these screenshots
+come from a phone set to Brazilian Portuguese.*
 
 ## Features
 
@@ -88,7 +89,8 @@ Planned (see the roadmap in [CLAUDE.md](CLAUDE.md#phase-status)):
 | Samsung Galaxy S9 (SM-G9600) | LineageOS 19.1 (Android 12) | Magisk 31.1 | all device suites pass |
 
 KernelSU, APatch and Android 13+ are supported in the code but **not tested on a device
-yet**. Reports are very welcome. Please include the device, ROM, Android version and root
+yet**. How the three root managers differ (and what UbuRoot does about it) is in
+[docs/ROOT_IMPLEMENTATIONS.md](docs/ROOT_IMPLEMENTATIONS.md). Reports are very welcome. Please include the device, ROM, Android version and root
 manager (with version).
 
 ## Install
@@ -287,6 +289,21 @@ Yes. It was built for de-Googled ROMs.
 **Which Ubuntu version do I get?**
 The newest LTS, discovered at install time from `cdimage.ubuntu.com`. Nothing is
 hardcoded.
+
+## Privacy and F-Droid
+
+- No analytics, tracking or ads, and no proprietary libraries (no Google Play Services,
+  Firebase or Play Core).
+- The app itself only talks to `cdimage.ubuntu.com`: the release listing, `SHA256SUMS`
+  and the Ubuntu Base download. Everything else is what you run inside Ubuntu (for
+  example, `apt` uses `ports.ubuntu.com`, set up as Ubuntu's normal package source).
+- **Anti-features: none apply.**
+  - *NonFreeNet* doesn't apply: Ubuntu Base is free software, downloaded once from
+    Canonical's public image server, which is not a non-free network service.
+  - *NonFreeDep* / *NonFreeAdd* / *Tracking* / *Ads*: none.
+  - Root is required. That's not an anti-feature, but the app does nothing without it.
+- Release builds come from the source by CI and are signed with the key whose
+  fingerprint is listed in [Install](#install).
 
 ## Contributing
 

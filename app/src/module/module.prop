@@ -1,0 +1,6 @@
+id=uburoot
+name=UbuRoot
+version=@VERSION_NAME@
+versionCode=@VERSION_CODE@
+author=reinanbr
+description=Ubuntu arm64 chroot with a real terminal. This file is both the UbuRoot app (APK) and its root module.

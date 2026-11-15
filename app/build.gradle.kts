@@ -3,6 +3,9 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val appVersionName = "0.1.0"
+val appVersionCode = 1
+
 android {
     namespace = "com.reinanbr.uburoot"
     compileSdk = 37
@@ -11,8 +14,8 @@ android {
         applicationId = "com.reinanbr.uburoot"
         minSdk = 26
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         ndk {
             // The chroot is arm64 only; drop the other ABIs Termux ships.
             abiFilters += "arm64-v8a"
@@ -53,4 +56,47 @@ dependencies {
     implementation(libs.libsu.core)
 
     testImplementation(libs.junit)
+}
+
+/**
+ * The APK is also a Magisk/KernelSU/APatch module and a Magisk recovery zip:
+ * src/module/ (module.prop, customize.sh, service.sh, META-INF/com/google/...)
+ * goes to the APK root as Java resources, so it is inside the signed APK.
+ */
+abstract class ModuleFilesTask : DefaultTask() {
+    @get:InputDirectory
+    abstract val source: DirectoryProperty
+
+    @get:Input
+    abstract val versionName: Property<String>
+
+    @get:Input
+    abstract val versionCode: Property<Int>
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        val out = output.get().asFile
+        out.deleteRecursively()
+        source.get().asFile.copyRecursively(out)
+        val prop = out.resolve("module.prop")
+        prop.writeText(
+            prop.readText()
+                .replace("@VERSION_NAME@", versionName.get())
+                .replace("@VERSION_CODE@", versionCode.get().toString()),
+        )
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register<ModuleFilesTask>("${variant.name}ModuleFiles") {
+            source.set(layout.projectDirectory.dir("src/module"))
+            versionName.set(appVersionName)
+            versionCode.set(appVersionCode)
+        }
+        variant.sources.resources?.addGeneratedSourceDirectory(task, ModuleFilesTask::output)
+    }
 }

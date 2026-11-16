@@ -30,7 +30,7 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (released in 0.3.0) |
 | 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
 | 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). CI release APK of `a7e5b2d` on the S9: preflight → terminal; Settings → Kernel access: the warning appears only when turning it on, Cancel keeps 0, Save writes `KERNEL_ACCESS='0'` with the "applies after Repair mounts" notice. on again through the warning + Save + *Repair mounts* (8 kernel binds); Kernel screen: state, developer mode (kptr 2→1, recorded), SELinux switch with its dialog (Permissive), *Revert changes* with its dialog (Enforcing, kptr 2, 0 changes), `dmesg -w` root tab (closing it left no process) |
-| 3 | Full hardware access (`HARDWARE_ACCESS`) | 3a (unit 35/35, guard 17/17, Docker 258/258) scripts + app: classes, grants, permission rules + watcher, Wi-Fi takeover, CPU/LED/wake lock/bus nodes, Hardware screen (`docs/HARDWARE.md`); device test of the release APK pending. 3b (audio/camera/sensors bridges, USB gadget) after review |
+| 3 | Full hardware access (`HARDWARE_ACCESS`) | 3a (unit 35/35, guard 17/17, Docker 259/259) scripts + app: classes, grants, permission rules + watcher, Wi-Fi takeover, CPU/LED/wake lock/bus nodes, Hardware screen (`docs/HARDWARE.md`); device test of the release APK pending. 3b (audio/camera/sensors bridges, USB gadget) after review |
 
 ## Core principle: system logic lives in shell scripts
 
@@ -451,6 +451,31 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   - Tools installed into the rootfs run with Ubuntu's `/bin/sh` (`ubu_install_tool`
     rewrites the `#!/system/bin/sh` line): `/system/bin/sh` exists inside only with
     `ANDROID_INTEGRATION`.
+  - **Writes to sysfs/proc: one `write()`, so `wr VALUE FILE` (changes.sh) = the
+    shell's builtin `echo`, never `printf`.** mksh has no builtin printf, and toybox's
+    writes `2803200` and `\n` separately (Ubuntu's strace on `/system/bin/printf` on the
+    S9); sysfs stores each write, so the lone `\n` fails with EINVAL. Seen as Stop all
+    leaving `file` records of the CPU max and an LED. Phase 2 hid it: its values were
+    one digit. `mount.sh` already used `echo` for inotify.
+  - policy4's `cpuinfo_max_freq` 2803200 (boost) is not in
+    `scaling_available_frequencies` (ends at 2649600): `cpu min|max` also accepts the
+    `cpuinfo_min/max_freq` values. Samsung's `led_b` ignores writes (reads back 0);
+    `led_r`/`led_g` show Android's notification LED.
+  - **Device test (CI release APK of `4eb727e` + the fixes pushed with
+    `adb-push-scripts.sh`, 2026-11-16).** Settings: the warning appears when turning it
+    on, Save writes `HARDWARE_ACCESS='1'`, *Repair mounts* installs `uburoot-hw` (`#!/bin/sh`)
+    and binds the log. Inside Ubuntu: `list`/`info`/`cpu`/`status`; out-of-table frequency,
+    `cpu0` offline and a battery file refused; `grant uinput ana` → `aid_uhid` 3011.
+    Takeover from the CLI and from the Hardware screen (dialog), Ubuntu's real
+    `wpa_supplicant` on `wlan0`; *Give back* stopped it and Android started its own
+    (`-g@android:wpa_wlan0`), Wi-Fi and scanning back to 1. The revert from the screen
+    and from `kernel.sh -y revert` restored policy4 max, policy0 governor, `led_r` and the
+    wake lock. From adb: `status` 2.1 s, takeover 1.0 s, release 0.5 s (`kill_ubuntu_exe`
+    is one `ls -l /proc/*/exe | awk`; the readlink loop made a release from the app ~20 s).
+  - **Terminal menu: "Close session" is always there** (disabled without a session).
+    After *Repair mounts* the terminal recreates its session asynchronously; the item
+    appeared while the menu was open and shifted every item below it by 120 px, so a tap
+    on *Hardware* opened *Kernel* (seen twice over adb, dump bounds vs. the started activity).
   - **Change-log lock and SIGPIPE.** Under dash, `uburoot-kernel status | grep -q ...`
     left `state/.lock` forever: grep exits early, dash dies of SIGPIPE and runs no EXIT
     trap (mksh did, so the suite only saw it once the tools ran with Ubuntu's `/bin/sh`).
@@ -571,7 +596,7 @@ directories as a fallback.
 ## Testing
 
 - `tests/run-all.sh`: everything below. Now: shellcheck 34 files, guard 17/17, Docker
-  258/258 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
+  259/259 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
   (0.9.0) must pass too: no `A && B || C`, `head -n 1 file` instead of `cat | head`,
   and `disable=SC2317,SC2329` together.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`

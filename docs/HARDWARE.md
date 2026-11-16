@@ -88,6 +88,10 @@ S9 (2026-11-16): after the two `cmd wifi` calls `wlan0` went down, Android's
 and `iw dev wlan0 scan` saw the nearby networks. Supported interface modes: IBSS,
 managed, AP, P2P. **No monitor mode** on this phone.
 
+Tested on the S9 (2026-11-16) from the CLI and from the Hardware screen: Ubuntu's own
+`wpa_supplicant` ran on `wlan0` after the takeover, and *Give back* stopped it; Android
+then started its own again and Wi-Fi came back.
+
 ## Bluetooth and NFC (S9)
 
 - **Bluetooth:** the chip (Broadcom BCM4361) sits on `ttyHS0` (the BT UART) and is

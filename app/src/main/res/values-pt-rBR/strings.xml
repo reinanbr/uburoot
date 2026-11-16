@@ -181,7 +181,7 @@
     <string name="kernel_permissive_body">O modo permissivo tira a proteção do SELinux de TODOS os apps e serviços do celular, não só do Ubuntu. Malwares ficam muito mais fáceis. Dura até você voltar, Desfazer mudanças, Parar tudo ou reiniciar.</string>
     <string name="kernel_permissive_accept">Mudar para permissivo</string>
     <string name="kernel_changes">Mudanças registradas: %1$d</string>
-    <string name="kernel_changes_hint">Feitas com uburoot-kernel / uburoot-kmod, aqui ou dentro do Ubuntu. Parar tudo e um reinício também as desfazem.</string>
+    <string name="kernel_changes_hint">Feitas com uburoot-kernel / uburoot-kmod / uburoot-hw, aqui, na tela Hardware ou dentro do Ubuntu. Parar tudo e um reinício também as desfazem.</string>
     <string name="kernel_revert">Desfazer mudanças</string>
     <string name="kernel_revert_body">Desfaz todas as mudanças registradas, da mais nova para a mais antiga: descarrega os módulos carregados pelo UbuRoot e restaura as configurações do kernel e o SELinux.</string>
     <string name="kernel_modules">Módulos carregados</string>

@@ -259,8 +259,9 @@ class TerminalActivity : ComponentActivity() {
                 BarButton("⋮", fg, stringResource(R.string.action_menu)) { menu = true }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     @Composable
-                    fun Item(label: Int, action: () -> Unit) = DropdownMenuItem(
+                    fun Item(label: Int, enabled: Boolean = true, action: () -> Unit) = DropdownMenuItem(
                         text = { Text(stringResource(label)) },
+                        enabled = enabled,
                         onClick = {
                             menu = false
                             action()
@@ -268,7 +269,10 @@ class TerminalActivity : ComponentActivity() {
                     )
                     Item(R.string.action_new_session) { newSession() }
                     Item(R.string.action_new_root_session) { newSession("root") }
-                    current?.let { s -> Item(R.string.action_close_session) { close(s) } }
+                    // Always there (disabled without a session): the session can appear
+                    // while the menu is open, and inserting the item then moved every
+                    // item below it under the user's finger.
+                    Item(R.string.action_close_session, enabled = current != null) { current?.let { close(it) } }
                     HorizontalDivider()
                     for (t in TerminalTheme.entries) {
                         DropdownMenuItem(

@@ -199,7 +199,9 @@ class HardwareActivity : ComponentActivity() {
                 .clickable { vm.info(c.name) },
         ) {
             Text("${c.name}  ·  ${c.route}  ·  ${c.state}" + if (c.nodes > 0) "  ·  ${c.nodes}" else "")
-            if (c.group.isNotEmpty() && user.isNotEmpty() && c.state != "missing") {
+            // Also while no device is plugged in: a serial/hidraw grant sets up the rule
+            // for the next one. Not for route "none": this kernel can't use the device.
+            if (c.group.isNotEmpty() && user.isNotEmpty() && c.route != "none") {
                 val granted = user in c.users
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

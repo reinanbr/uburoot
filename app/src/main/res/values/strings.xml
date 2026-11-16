@@ -183,7 +183,7 @@
     <string name="kernel_permissive_body">Permissive mode removes SELinux protection from EVERY app and service on the phone, not just Ubuntu. Malware gets much easier. It lasts until you switch it back, Revert changes, Stop all or a reboot.</string>
     <string name="kernel_permissive_accept">Switch to permissive</string>
     <string name="kernel_changes">Recorded changes: %1$d</string>
-    <string name="kernel_changes_hint">Made with uburoot-kernel / uburoot-kmod, here or inside Ubuntu. Stop all and a reboot undo them too.</string>
+    <string name="kernel_changes_hint">Made with uburoot-kernel / uburoot-kmod / uburoot-hw, here, on the Hardware screen or inside Ubuntu. Stop all and a reboot undo them too.</string>
     <string name="kernel_revert">Revert changes</string>
     <string name="kernel_revert_body">Undo every recorded change, newest first: unload the modules loaded through UbuRoot, restore kernel settings and SELinux.</string>
     <string name="kernel_modules">Loaded modules</string>

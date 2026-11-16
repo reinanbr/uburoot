@@ -308,8 +308,10 @@ report() {
     _ph=$(prop security.perf_harden)
     [ -n "$_ph" ] && kv "security.perf_harden" "$_ph"
     for _k in $UBU_KERNEL_FS; do
-        _p=$(ubu_fs_mount "${_k%%:*}" "${_k#*:}")
-        kv "host ${_k%%:*}" "${_p:-not mounted}"
+        _t=${_k%%:*}
+        _p=${_k#*:}
+        _p=$(ubu_fs_mount "$_t" "${_p%%:*}")
+        kv "host $_t" "${_p:-not mounted}"
     done
     if [ "$MOUNTED" = 1 ] && [ -x "$R/usr/sbin/iw" ]; then
         _phys=$(in_chroot 10 iw phy 2>/dev/null | bb awk '
@@ -366,9 +368,12 @@ report() {
         if [ -z "$_miss" ]; then ok expected "all present"; else fail expected "missing:$_miss (Settings > Repair mounts)"; fi
         if ubu_any_shared_under "$R"; then fail propagation "a mount under the rootfs is shared"; else ok propagation "nothing shared"; fi
         _ki=""
-        for _k in $UBU_KERNEL_FS; do ubu_is_mounted "$R${_k#*:}" && _ki="$_ki ${_k%%:*}"; done
-        ubu_is_mounted "$R/usr/lib/modules/$(uname -r)" && _ki="$_ki modules"
-        kv "kernel interfaces" "${_ki# }"
+        for _k in $UBU_KERNEL_FS; do
+            _p=${_k#*:}
+            ubu_is_mounted "$R${_p%%:*}" && _ki="$_ki ${_k%%:*}"
+        done
+        [ -n "$(ubu_mounts_under "$R/usr/lib/modules")" ] && _ki="$_ki modules"
+        kv "kernel interfaces" "${_ki:- none (KERNEL_ACCESS=$KERNEL_ACCESS)}"
         kv "chroot processes" "$(ubu_chroot_pids | bb wc -l | tr -d ' ')"
     else
         kv state "not mounted (opening a terminal mounts it)"
@@ -414,6 +419,7 @@ report() {
             fi
         else
             fail "DNS lookup" "$_hostname does not resolve (Settings > DNS)"
+            kv "mirror reachable" "not checked (no DNS)"
         fi
     else
         kv "DNS / mirror" "not checked (Ubuntu not mounted)"
@@ -424,6 +430,9 @@ report() {
     kv ANDROID_INTEGRATION "$ANDROID_INTEGRATION"
     kv DEFAULT_USER "$(ident "$DEFAULT_USER")"
     kv APT_MIRROR "${APT_MIRROR:-default}"
+    kv KERNEL_ACCESS "$KERNEL_ACCESS"
+    _kc=$("$UBU_SH" "$UBU_BIN_DIR/kernel.sh" status 2>/dev/null | bb awk -F= '$1 == "changes" { print $2 }')
+    kv "kernel changes" "${_kc:-0} recorded (reverted by Stop all)"
     kv BOOT_START "$BOOT_START"
     kv INOTIFY_MAX_WATCHES "$INOTIFY_MAX_WATCHES (now $(cat "$UBU_INOTIFY_FILE" 2>/dev/null))"
     kv "boot module" "$("$UBU_SH" "$UBU_BIN_DIR/boot.sh" --status 2>/dev/null | bb awk -F= '$1 == "module" { print $2 }')"

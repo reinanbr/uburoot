@@ -15,14 +15,27 @@ UBU_CONFIG="${UBU_CONFIG:-$UBU_BASE/uburoot.conf}"
 UBU_MOUNTS_FILE="${UBU_MOUNTS_FILE:-/proc/self/mounts}"
 UBU_MOUNTINFO_FILE="${UBU_MOUNTINFO_FILE:-/proc/self/mountinfo}"
 UBU_INOTIFY_FILE="${UBU_INOTIFY_FILE:-/proc/sys/fs/inotify/max_user_watches}"
+# Kernel changes made through uburoot-kernel, reverted by Stop all (kernel.sh).
+UBU_STATE="${UBU_STATE:-$UBU_BASE/state}"
 
 # Directories inside the rootfs that only ever serve as bind-mount targets.
 # They must be empty (rmdir-able) before the rootfs may be deleted.
 UBU_BIND_TARGETS="data sdcard system vendor product system_ext odm apex linkerconfig"
 # Android partitions bound recursively at the same path inside the rootfs.
 UBU_ANDROID_PARTS="/system /vendor /product /system_ext /odm /apex /linkerconfig"
-# Host kernel filesystems bound into the chroot's sysfs (type:path); mount.sh.
-UBU_KERNEL_FS="configfs:/sys/kernel/config debugfs:/sys/kernel/debug tracefs:/sys/kernel/tracing bpf:/sys/fs/bpf"
+# Kernel filesystems for KERNEL_ACCESS=1 (mount.sh), as TYPE:PATH:HOW. The host's
+# mount of TYPE is bound at PATH inside the rootfs (so Ubuntu sees the same
+# objects: netd's pinned BPF maps, the USB gadget, Android's cgroups); where the
+# host has none, HOW=new mounts a fresh instance and HOW=bind skips it. PATH
+# must already exist in the chroot's own sysfs/proc (the kernel creates those
+# directories only when it supports the filesystem).
+UBU_KERNEL_FS="configfs:/sys/kernel/config:new debugfs:/sys/kernel/debug:new
+tracefs:/sys/kernel/tracing:new bpf:/sys/fs/bpf:new cgroup2:/sys/fs/cgroup:bind
+pstore:/sys/fs/pstore:new selinuxfs:/sys/fs/selinux:bind securityfs:/sys/kernel/security:new
+fusectl:/sys/fs/fuse/connections:new binfmt_misc:/proc/sys/fs/binfmt_misc:new"
+# Where ROMs keep kernel modules (bound read-only for modprobe, KERNEL_ACCESS=1).
+UBU_MODULE_SOURCES="/vendor_dlkm/lib/modules /vendor/lib/modules /system_dlkm/lib/modules
+/odm/lib/modules /lib/modules"
 
 # Version of the integration files setup.sh writes into the rootfs. Bump it
 # together with a new migrate_N in setup.sh; the app runs `setup.sh --migrate`
@@ -59,6 +72,7 @@ ubu_load_config() {
     BOOT_START=0
     BOOT_SCRIPT_TIMEOUT=60
     APT_MIRROR=""
+    KERNEL_ACCESS=0
     if [ -f "$UBU_CONFIG" ]; then
         # shellcheck source=/dev/null
         . "$UBU_CONFIG"
@@ -420,8 +434,19 @@ ubu_safe_rm() {
         fi
     done
 
-    # 3) Markers of live kernel filesystems / the real /dev.
-    for _m in proc/self sys/kernel dev/block dev/binder; do
+    # Module directory binds (KERNEL_ACCESS) must be empty too.
+    for _p in "$_canon"/usr/lib/modules/*/uburoot/*; do
+        if [ ! -d "$_p" ] || [ -L "$_p" ]; then continue; fi
+        if ! rmdir "$_p" 2>/dev/null; then
+            ubu_log "REFUSED to delete $_canon: module mountpoint $_p is not empty"
+            return 3
+        fi
+    done
+
+    # 3) Markers of live kernel filesystems (sysfs and everything bound into
+    #    it: configfs with the USB gadget, cgroups, bpffs...), the real /dev and
+    #    the kernel-change state.
+    for _m in proc/self sys/kernel sys/fs dev/block dev/binder run/uburoot; do
         if [ -e "$_canon/$_m" ]; then
             ubu_log "REFUSED to delete $_canon: $_canon/$_m exists (live mount?)"
             return 3

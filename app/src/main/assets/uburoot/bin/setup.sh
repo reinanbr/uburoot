@@ -336,7 +336,7 @@ if [ "$DO_APT" = 1 ]; then
         in_chroot apt-get update || ubu_die "apt-get update failed (network/DNS?)"
     fi
     ubu_log "installing sudo"
-    in_chroot apt-get install -y --no-install-recommends sudo || ubu_die "apt-get install sudo failed"
+    in_chroot apt-get install -y --no-install-recommends sudo kmod || ubu_die "apt-get install sudo kmod failed"
 fi
 
 # --- User ------------------------------------------------------------------------

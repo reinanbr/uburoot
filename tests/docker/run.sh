@@ -21,6 +21,12 @@ if [ ! -f "$CACHE/$FILE" ] || [ "$(sha256sum "$CACHE/$FILE" | cut -d' ' -f1)" !=
 fi
 [ "$(sha256sum "$CACHE/$FILE" | cut -d' ' -f1)" = "$SHA" ] || { echo "SHA256 mismatch" >&2; exit 1; }
 
-docker run --rm --privileged \
+# The host's modules for the running kernel (the container shares that kernel)
+# stand in for a ROM's /vendor_dlkm/lib/modules: real .ko files for depmod,
+# modinfo and modprobe --dry-run. Nothing is ever loaded.
+MODS=""
+[ -d "/lib/modules/$(uname -r)/kernel" ] && MODS="-v /lib/modules/$(uname -r):/vendor_dlkm/lib/modules:ro"
+# shellcheck disable=SC2086 # MODS is empty or one -v option
+docker run --rm --privileged $MODS \
     -v "$ROOT:/src:ro" -v "$CACHE:/cache:ro" \
     "$IMAGE" sh /src/tests/docker/inside.sh "/cache/$FILE" "$SHA"

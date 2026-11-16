@@ -51,6 +51,89 @@ else
     ubu_warn "mount /run failed"
 fi
 
+# 1b) Kernel access [KERNEL_ACCESS]: the kernel's own interfaces inside Ubuntu,
+#     at the paths a normal Linux has them. Root in Ubuntu then controls the
+#     phone's kernel; every change made through uburoot-kernel is recorded in
+#     $UBU_STATE and reverted by Stop all.
+if [ "$KERNEL_ACCESS" = 1 ]; then
+    for _k in $UBU_KERNEL_FS; do
+        _t=${_k%%:*}
+        _rest=${_k#*:}
+        _p=${_rest%%:*}
+        _how=${_rest#*:}
+        _dst="$R$_p"
+        # The kernel creates these directories in sysfs/proc only when it
+        # supports the filesystem; never mkdir there.
+        [ -d "$_dst" ] || continue
+        ubu_is_mounted "$_dst" && continue
+        _src=$(ubu_fs_mount "$_t" "$_p")
+        if [ -n "$_src" ]; then
+            ubu_bind bind "$_src" "$_dst" || ubu_warn "bind $_src ($_t) -> $_p failed"
+        elif [ "$_how" = new ] && bb grep -qw "$_t" /proc/filesystems 2>/dev/null; then
+            # Under the private rootfs a new mount is private too.
+            ubu_mount_fs "$_t" "$_t" "$_dst" || ubu_warn "mount $_t at $_p failed"
+        fi
+    done
+    # Android's cgroup v1 controllers (cpuset, cpuctl, memcg...) live under
+    # /dev; $R/dev is a non-recursive bind, so bind each at the same path.
+    for _c in $(bb awk -v r="$R" '$3 == "cgroup" && index($2, "/dev/") == 1 && index($2, r "/") != 1 { print $2 }' "$UBU_MOUNTS_FILE"); do
+        if [ -d "$R$_c" ] && ! ubu_is_mounted "$R$_c"; then
+            ubu_bind bind "$_c" "$R$_c" || ubu_warn "bind cgroup $_c failed"
+        fi
+    done
+
+    # The ROM's kernel modules, read-only, under /lib/modules/$(uname -r)/uburoot/;
+    # depmod writes modules.dep into the rootfs, never into vendor.
+    _kv=$(uname -r)
+    _mods=""
+    for _s in $UBU_MODULE_SOURCES; do
+        [ -d "$_s/$_kv" ] && _s="$_s/$_kv"
+        [ -d "$_s" ] || continue
+        [ -n "$(bb find "$_s" -name '*.ko*' 2>/dev/null | head -n 1)" ] || continue
+        _name=$(printf '%s' "${_s#/}" | tr '/' '_')
+        _dst="$R/usr/lib/modules/$_kv/uburoot/$_name"
+        if ! ubu_is_mounted "$_dst"; then
+            if ubu_bind bind "$_s" "$_dst"; then
+                bb mount -o remount,bind,ro "$_dst" 2>/dev/null || ubu_warn "could not make $_dst read-only"
+            else
+                ubu_warn "bind $_s -> modules failed"
+                continue
+            fi
+        fi
+        _mods="$_mods $_s"
+    done
+    _md="$R/usr/lib/modules/$_kv"
+    if [ -n "$_mods" ]; then
+        if [ ! -e "$R/usr/sbin/depmod" ] && [ ! -e "$R/sbin/depmod" ]; then
+            ubu_log "kernel modules found ($_mods ), but Ubuntu has no depmod: apt install kmod"
+        elif [ ! -f "$_md/modules.dep" ] || [ "$(cat "$_md/.uburoot-sources" 2>/dev/null)" != "$_mods" ]; then
+            if bb chroot "$R" /usr/bin/env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin depmod -a "$_kv" 2>/dev/null; then
+                printf '%s' "$_mods" >"$_md/.uburoot-sources"
+            else
+                ubu_warn "depmod failed for $_kv"
+            fi
+        fi
+    fi
+
+    # The change log, shared with the host-side kernel.sh (Stop all reverts it).
+    mkdir -p "$UBU_STATE" && chmod 700 "$UBU_STATE"
+    ubu_bind bind "$UBU_STATE" "$R/run/uburoot/state" || ubu_warn "bind $UBU_STATE failed"
+    chmod 700 "$R/run/uburoot" 2>/dev/null
+    # Ubuntu-side tools.
+    if mkdir -p "$R/usr/local/sbin"; then
+        for _t in kernel.sh:uburoot-kernel kbuild.sh:uburoot-kbuild; do
+            _d="$R/usr/local/sbin/${_t#*:}"
+            if ! { cp -f "$UBU_BIN_DIR/${_t%%:*}" "$_d.tmp" && chown 0:0 "$_d.tmp" &&
+                chmod 755 "$_d.tmp" && mv -f "$_d.tmp" "$_d"; }; then
+                ubu_warn "cannot install ${_t#*:}"
+            fi
+        done
+        ln -sf uburoot-kernel "$R/usr/local/sbin/uburoot-kmod"
+    fi
+elif ubu_is_mounted "$R/run/uburoot/state"; then
+    ubu_log "KERNEL_ACCESS=0 but the kernel interfaces are still mounted (use 'Reparar mounts')"
+fi
+
 # The kernel hostname is shared with Android and must not be changed; make it
 # resolvable inside the chroot (sudo warns on every call otherwise).
 _kh=$(cat /proc/sys/kernel/hostname 2>/dev/null) || _kh=""

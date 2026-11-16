@@ -232,7 +232,10 @@ check "doctor (plain) names the user" grep -qw tester /tmp/doctor.txt
 check "redacted: no user name" sh -c "! grep -qw tester /tmp/doctor-r.txt"
 check "redacted: no kernel hostname" sh -c "! grep -qwF \"\$(cat /proc/sys/kernel/hostname)\" /tmp/doctor-r.txt"
 check "redacted: marked as such" grep -q '^redacted: *yes' /tmp/doctor-r.txt
-check "redacted: same report shape" test "$(wc -l </tmp/doctor.txt)" = "$(wc -l </tmp/doctor-r.txt)"
+# Same keys in the same order (values differ: that's the point).
+cut -c1-25 /tmp/doctor.txt >/tmp/doctor.keys
+cut -c1-25 /tmp/doctor-r.txt >/tmp/doctor-r.keys
+if cmp -s /tmp/doctor.keys /tmp/doctor-r.keys; then ok "redacted: same report shape"; else bad "redacted: same report shape"; diff /tmp/doctor.keys /tmp/doctor-r.keys | head -20; fi
 setpriv --bounding-set -sys_module /system/bin/sh $B/doctor.sh >/tmp/doctor-x.txt 2>&1
 check "doctor: restricted root reported as FAIL" grep -q '^full root: *\[FAIL\]' /tmp/doctor-x.txt
 rm -f /data/local/uburoot/uburoot.conf /vendor/lib/modules/fake.ko
@@ -416,6 +419,144 @@ check "real /apex marker readable" test -f /apex/com.android.runtime/marker
 check "real /dev/pts still mounted" grep -q ' /dev/pts ' /proc/self/mounts
 check "real /data still mounted" grep -q ' /data ' /proc/self/mounts
 check "umount.sh idempotent" $B/umount.sh
+
+section "kernel access (KERNEL_ACCESS=1)"
+# Kernel filesystems like Android's: configfs at /config, the rest in /sys.
+mkdir -p /config
+for m in configfs:none:/config debugfs:debugfs:/sys/kernel/debug tracefs:tracefs:/sys/kernel/tracing \
+    bpf:bpf:/sys/fs/bpf pstore:pstore:/sys/fs/pstore; do
+    t=${m%%:*}
+    p=${m##*:}
+    grep -q " $p " /proc/self/mounts || mount -t "$t" "$t" "$p" 2>/dev/null || echo "  info: no $t here"
+done
+outside() { awk -v r="$R" '$5 != r && index($5, r "/") != 1 { print $5, $9, $10 }' /proc/self/mountinfo | sort; }
+outside >/tmp/kbase.txt
+KV=$(uname -r)
+echo "KERNEL_ACCESS=1" >/data/local/uburoot/uburoot.conf
+$B/mount.sh >/tmp/kmount.log 2>&1
+check "mount.sh with KERNEL_ACCESS=1" grep -q . /proc/self/mounts
+for t in configfs:/sys/kernel/config debugfs:/sys/kernel/debug tracefs:/sys/kernel/tracing bpf:/sys/fs/bpf cgroup2:/sys/fs/cgroup pstore:/sys/fs/pstore; do
+    if awk -v t="${t%%:*}" '$3 == t && index($2, "/data/") != 1 { f = 1 } END { exit !f }' /proc/self/mounts; then
+        check "kernel fs in Ubuntu: ${t%%:*} at ${t#*:}" grep -q " $R${t#*:} ${t%%:*} " /proc/self/mounts
+    else
+        echo "  info: the container has no ${t%%:*}; skipped"
+    fi
+done
+check "host configfs (/config) is what Ubuntu sees" sh -c "[ \"\$(stat -c %i /config)\" = \"\$(stat -c %i $R/sys/kernel/config)\" ]"
+check "no shared mount under rootfs" sh -c "! awk -v p=$R '(\$5==p||index(\$5,p\"/\")==1){for(i=7;i<=NF&&\$i!=\"-\";i++)if(\$i~/^shared:/)f=1}END{exit !f}' /proc/self/mountinfo"
+check "change log bound at /run/uburoot/state" grep -q " $R/run/uburoot/state " /proc/self/mounts
+check "uburoot-kernel, uburoot-kmod, uburoot-kbuild installed" sh -c "[ -x $R/usr/local/sbin/uburoot-kernel ] && [ -L $R/usr/local/sbin/uburoot-kmod ] && [ -x $R/usr/local/sbin/uburoot-kbuild ]"
+n1=$(mounted_under $R)
+$B/mount.sh >/dev/null 2>&1
+check "idempotent with kernel access ($n1 mounts)" test "$(mounted_under $R)" = "$n1"
+if [ -d /vendor_dlkm/lib/modules/kernel ]; then
+    MD=$R/usr/lib/modules/$KV
+    check "ROM modules bound read-only" sh -c "grep -q ' $MD/uburoot/vendor_dlkm_lib_modules ' /proc/self/mounts && ! touch $MD/uburoot/vendor_dlkm_lib_modules/x 2>/dev/null"
+    check "depmod wrote modules.dep into the rootfs" test -s "$MD/modules.dep"
+    mod=$(awk -F: 'NR == 1 { n = $1; sub(/.*\//, "", n); sub(/\.ko.*/, "", n); print n }' "$MD/modules.dep")
+    check "modinfo $mod inside Ubuntu" sh -c "chroot $R modinfo -F vermagic $mod | grep -q '^$KV '"
+    check "modprobe --dry-run $mod resolves the bound file" sh -c "chroot $R modprobe -n -v $mod 2>&1 | grep -q 'uburoot/vendor_dlkm_lib_modules/'"
+else
+    echo "  info: no host modules for $KV; module binds skipped"
+fi
+
+# uburoot-kernel against fake kernel files (never the real kernel: it is the host's).
+K=$R/tmp/k
+CH=/data/local/uburoot/state/changes
+mkdir -p $K/sys/kernel/random
+echo 2 >$K/sys/kernel/kptr_restrict
+echo 1 >$K/sys/kernel/dmesg_restrict
+echo 3 >$K/sys/kernel/perf_event_paranoid
+echo 1 >$K/enforce
+echo "boot-1" >$K/boot_id
+printf 'vendor_wlan 16384 0 - Live 0x0\n' >$K/modules
+printf '#!/bin/sh\nn=$(basename "$1"); n=${n%%%%.ko*}\n{ echo "$n 16384 0 - Live 0x0"; cat "$UBU_PROC_MODULES"; } >"$UBU_PROC_MODULES.t" && mv "$UBU_PROC_MODULES.t" "$UBU_PROC_MODULES"\n' >$K/insmod
+printf '#!/bin/sh\ngrep -v "^$1 " "$UBU_PROC_MODULES" >"$UBU_PROC_MODULES.t"; mv "$UBU_PROC_MODULES.t" "$UBU_PROC_MODULES"\n' >$K/rmmod
+chmod 755 $K/insmod $K/rmmod
+: >$K/fake.ko
+kin() { # uburoot-kernel inside Ubuntu
+    chroot $R env UBU_SYSCTL_DIR=/tmp/k/sys UBU_SELINUX_ENFORCE=/tmp/k/enforce UBU_PROC_MODULES=/tmp/k/modules \
+        UBU_BOOT_ID_FILE=/tmp/k/boot_id UBU_INSMOD=/tmp/k/insmod UBU_RMMOD=/tmp/k/rmmod /usr/local/sbin/uburoot-kernel "$@"
+}
+kout() { # kernel.sh on the Android side (the app, Stop all)
+    env UBU_SYSCTL_DIR=$K/sys UBU_SELINUX_ENFORCE=$K/enforce UBU_PROC_MODULES=$K/modules \
+        UBU_BOOT_ID_FILE=$K/boot_id UBU_INSMOD=$K/insmod UBU_RMMOD=$K/rmmod /system/bin/sh $B/kernel.sh "$@"
+}
+val() { cat "$K/$1"; }
+k_access() { kin status | grep -qx access=on; }
+k_devmode() { kin -y devmode on >/dev/null && [ "$(val sys/kernel/kptr_restrict)" = 1 ]; }
+k_sysctl() { kin sysctl kernel.dmesg_restrict 0 >/dev/null && grep -qx 'sysctl kernel.dmesg_restrict 1' $CH; }
+k_sysctl2() { kin sysctl kernel.dmesg_restrict 2 >/dev/null && [ "$(grep -c kernel.dmesg_restrict $CH)" = 1 ] && grep -qx 'sysctl kernel.dmesg_restrict 1' $CH; }
+k_badname() { ! kin sysctl ../../etc/passwd x 2>/dev/null; }
+k_noconfirm() { ! kin selinux permissive </dev/null 2>/dev/null && [ "$(val enforce)" = 1 ]; }
+k_selinux() { kin -y selinux permissive >/dev/null && [ "$(val enforce)" = 0 ] && grep -qx 'selinux - 1' $CH; }
+k_load() { kin -y module load /tmp/k/fake.ko >/dev/null && grep -q '^fake ' $K/modules && grep -qx 'module fake -' $CH; }
+k_list() {
+    chroot $R env UBU_PROC_MODULES=/tmp/k/modules UBU_BOOT_ID_FILE=/tmp/k/boot_id /usr/local/sbin/uburoot-kmod list | grep -qx '\* fake'
+}
+k_notours() { ! kin -y module unload vendor_wlan 2>/dev/null && grep -q '^vendor_wlan ' $K/modules; }
+k_changes() { kout status | grep -qx "changes=$1"; }
+check "Ubuntu side: access=on" k_access
+check "devmode on: kptr_restrict 2 -> 1" k_devmode
+check "sysctl write records the original" k_sysctl
+check "a second write keeps the first original" k_sysctl2
+check "sysctl rejects a path outside /proc/sys" k_badname
+check "SELinux permissive needs -y without a terminal" k_noconfirm
+check "SELinux permissive recorded" k_selinux
+check "module load (file) recorded" k_load
+check "uburoot-kmod list marks ours" k_list
+check "unloading a module UbuRoot did not load is refused" k_notours
+check "Android side sees the same 4 changes" k_changes 4
+# Stop all: umount --kill, then revert (the app runs exactly this).
+$B/umount.sh --kill >/dev/null 2>&1
+kout -y revert >/tmp/krevert.log 2>&1
+rc=$?
+check "Stop all: revert (rc=$rc)" test "$rc" = 0
+k_reverted() {
+    [ "$(val sys/kernel/kptr_restrict)" = 2 ] && [ "$(val sys/kernel/dmesg_restrict)" = 1 ] && [ "$(val enforce)" = 1 ] &&
+        ! grep -q '^fake ' $K/modules && grep -q '^vendor_wlan ' $K/modules
+}
+check "reverted: kptr_restrict 2, dmesg_restrict 1, enforcing, module gone" k_reverted
+# Recorded: kptr_restrict, dmesg_restrict, SELinux, module -> reverted newest first.
+check "revert order: newest first (module ... kptr_restrict)" sh -c "head -1 /tmp/krevert.log | grep -q 'module fake' && sed -n 2p /tmp/krevert.log | grep -q selinux && tail -1 /tmp/krevert.log | grep -q kernel.kptr_restrict"
+check "change log empty" k_changes 0
+check "nothing left under rootfs" test "$(mounted_under $R)" = 0
+outside >/tmp/kafter.txt
+check "container mount table identical (kernel fs sources survive)" cmp -s /tmp/kbase.txt /tmp/kafter.txt
+kout -y sysctl kernel.kptr_restrict 1 >/dev/null 2>&1
+echo boot-2 >$K/boot_id
+check "a change log from an earlier boot is discarded" k_changes 0
+echo 2 >$K/sys/kernel/kptr_restrict
+rm -f /data/local/uburoot/uburoot.conf
+k_off() { ! kout -y sysctl kernel.kptr_restrict 1 2>/dev/null && [ "$(val sys/kernel/kptr_restrict)" = 2 ]; }
+check "changes refused with KERNEL_ACCESS=0" k_off
+$B/mount.sh >/dev/null 2>&1
+check "KERNEL_ACCESS=0 mounts no kernel fs" sh -c "! grep -qE ' $R/(sys/kernel/config|sys/fs/bpf|run/uburoot/state) ' /proc/self/mounts"
+$B/umount.sh >/dev/null 2>&1
+
+section "uburoot-kbuild (fake kernel tree)"
+mkdir -p /tmp/ksrc
+cat >/tmp/ksrc/Makefile <<'EOF'
+VERSION = 9
+PATCHLEVEL = 9
+SUBLEVEL = 9
+EXTRAVERSION =
+olddefconfig modules_prepare:
+	@echo "$@ done"
+kernelrelease:
+	@. ./.config; echo "$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)$(EXTRAVERSION)$$CONFIG_LOCALVERSION"
+EOF
+printf 'CONFIG_MODULES=y\nCONFIG_SMP=y\nCONFIG_PREEMPT=y\nCONFIG_MODULE_UNLOAD=y\nCONFIG_MODVERSIONS=y\nCONFIG_MODULE_SIG=y\nCONFIG_MODULE_SIG_FORCE=y\nCONFIG_LOCALVERSION="-old"\n' | gzip >/tmp/kconfig.gz
+command -v make >/dev/null 2>&1 || apt-get install -y -qq make gcc bc flex bison >/dev/null 2>&1
+kb() { env UBU_KCONFIG=/tmp/kconfig.gz UBU_KBUILD_STATE=/tmp/kbstate sh /src/app/src/main/assets/uburoot/bin/kbuild.sh "$@"; }
+out=$(kb check 2>&1)
+check "check: expected vermagic" sh -c "printf '%s' \"\$1\" | grep -q \"expected vermagic: *$KV SMP preempt mod_unload modversions\"" _ "$out"
+check "check: signature enforcement explained" sh -c "printf '%s' \"\$1\" | grep -q 'ENFORCED'" _ "$out"
+check "prepare refuses a source of another version" sh -c "! kb prepare /tmp/ksrc 2>/dev/null"
+base=$(printf '%s' "$KV" | sed 's/^\([0-9]*\.[0-9]*\.[0-9]*\).*/\1/')
+sed -i "s/^VERSION = .*/VERSION = ${base%%.*}/; s/^PATCHLEVEL = .*/PATCHLEVEL = $(echo "$base" | cut -d. -f2)/; s/^SUBLEVEL = .*/SUBLEVEL = ${base##*.}/" /tmp/ksrc/Makefile
+check "prepare: config + LOCALVERSION so kernelrelease = uname -r" kb prepare /tmp/ksrc
+check "prepare: LOCALVERSION is the release suffix" grep -qx "CONFIG_LOCALVERSION=\"${KV#"$base"}\"" /tmp/ksrc/.config
 
 section "reset with a live session (--kill)"
 $B/enter.sh root 'sleep 600' >/dev/null 2>&1 &

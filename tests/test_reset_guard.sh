@@ -123,6 +123,25 @@ mkdir -p "$ROOTFS/proc/self"
 rc=$(safe_rm "$ROOTFS")
 if [ "$rc" = 3 ] && [ -d "$ROOTFS" ]; then ok "proc/self marker -> refused"; else bad "marker: rc=$rc"; fi
 
+# Kernel access (KERNEL_ACCESS=1): configfs with the USB gadget, cgroups and
+# bpffs live under sys/fs and sys/kernel; the change log is bound at run/uburoot.
+for m in sys/fs/cgroup sys/kernel/config/usb_gadget run/uburoot/state; do
+    make_rootfs
+    mkdir -p "$ROOTFS/$m"
+    rc=$(safe_rm "$ROOTFS")
+    if [ "$rc" = 3 ] && [ -d "$ROOTFS/$m" ]; then ok "$m marker -> refused"; else bad "$m marker: rc=$rc"; fi
+done
+
+make_rootfs
+mkdir -p "$ROOTFS/usr/lib/modules/4.9.337/uburoot/vendor_lib_modules"
+echo "vendor module" >"$ROOTFS/usr/lib/modules/4.9.337/uburoot/vendor_lib_modules/wlan.ko"
+rc=$(safe_rm "$ROOTFS")
+if [ "$rc" = 3 ] && [ -f "$ROOTFS/usr/lib/modules/4.9.337/uburoot/vendor_lib_modules/wlan.ko" ]; then
+    ok "non-empty module bind target (vendor modules) -> refused"
+else
+    bad "module bind target: rc=$rc"
+fi
+
 make_rootfs
 rc=$(safe_rm "$T")
 if [ "$rc" = 3 ] && [ -d "$ROOTFS" ]; then ok "path outside UBU_BASE -> refused"; else bad "outside: rc=$rc"; fi

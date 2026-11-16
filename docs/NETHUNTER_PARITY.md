@@ -54,18 +54,18 @@ Status: **done** (in a release), **partial**, **planned**, **out** (out of scope
 | Rootless edition (Termux + proot, NetHunter Store) | None | Decision document only (`docs/ROOTLESS.md`) | optional | planned (research) | UbuRoot requires root with full kernel access. Without root, the mounts, binds, raw sockets, iptables, boot start, bridge and every kernel/hardware feature are gone: likely a separate app. |
 | Pre-install guidance (unlock, root, developer options, disable force encryption) | README: root manager, arm64 | `docs/INSTALLING.md`. No step to disable encryption: UbuRoot works on encrypted `/data`, and the boot script waits for the first unlock | 11 | planned | |
 | SHA256 check of the download | `SHA256SUMS` from cdimage, checked after download, one re-fetch | Keep | — | done | |
-| "Keep the screen awake while installing, Android may kill the app" | No wake lock during install (only sessions have one); resumes after a kill | Wake lock + `FLAG_KEEP_SCREEN_ON` during download/extract | 1 | planned | |
-| Install from local storage | Download only | Local `.tar.gz` / `.tar.xz` picked with SAF, optional SHA256 | 1 | planned | |
-| Mirror choice | Fixed `ports.ubuntu.com` | Choose a `ports.ubuntu.com` mirror | 1 | planned | |
+| "Keep the screen awake while installing, Android may kill the app" | Partial wake lock (1 h cap) + screen kept on while installing; resumes after a kill | Wake lock + `FLAG_KEEP_SCREEN_ON` during download/extract | 1 | done | |
+| Install from local storage | *Advanced*: local `.tar.gz`/`.tar.xz` via SAF, optional SHA256; format from the magic bytes, rootfs CPU checked | Local `.tar.gz` / `.tar.xz` picked with SAF, optional SHA256 | 1 | done | |
+| Mirror choice | `APT_MIRROR` (install form and Settings), `http://` only; security updates stay on Canonical | Choose a `ports.ubuntu.com` mirror | 1 | done | |
 | Full vs minimal chroot (kalifs-full / kalifs-minimal) | Ubuntu Base (minimal) + `setup.sh` | Profiles applied with `apt` after install (minimal, development, network tools, desktop, hardware/SDR, kernel dev); lists in a versioned asset | 6 | planned | |
 | Update channels (quarterly release, weekly, daily builds; Store for the app) | GitHub releases; per-commit CI artifacts; F-Droid recipe ready (MR pending) | Optional update check in a non-F-Droid flavor, off by default | 11 | planned | |
 | **Root and kernel** | | | | | |
-| Lite needs Magisk root; Full needs a device kernel | Needs root in the init mount namespace (preflight compares `mnt_ns`) | **Require full root**: uid 0, `CapEff` and `CapBnd` = every capability up to `cap_last_cap`, no seccomp, no `NoNewPrivs`, init mount namespace. Refuse with an explanation otherwise (e.g. a KernelSU App Profile with fewer capabilities: verified in `kernel/policy/app_profile.c`) | 1 | planned | |
+| Lite needs Magisk root; Full needs a device kernel | Preflight refuses a restricted root (`rootinfo.sh` `full_root=`), with the reason | **Require full root**: uid 0, `CapEff` and `CapBnd` = every capability up to `cap_last_cap`, no seccomp, no `NoNewPrivs`, init mount namespace. Refuse with an explanation otherwise (e.g. a KernelSU App Profile with fewer capabilities: verified in `kernel/policy/app_profile.c`) | 1 | done | |
 | Kernel interfaces available to Kali root | Not visible in the chroot (see the gap above) | `KERNEL_ACCESS=1`: bind the host's configfs, tracefs, bpffs, cgroups, pstore; new instances only where the host has none (debugfs, binfmt_misc, securityfs, fusectl); `ubu_safe_rm` markers; Docker host-identical check | 2 | planned | |
-| Kernel features (HID, OTG Wi-Fi, CD-ROM emulation, SDR, y-cable charging, kexec) | — | Doctor kernel report (config or probing: GKI, module signing, vermagic, BTF, kprobes, sysctls); build guide for kernels with extra options | 1, 10 | planned | Building kernels in the app: no (a docs/CI guide instead). |
+| Kernel features (HID, OTG Wi-Fi, CD-ROM emulation, SDR, y-cable charging, kexec) | Doctor kernel report (config or probes) + hardware inventory with device owners | Doctor kernel report (config or probing: GKI, module signing, vermagic, BTF, kprobes, sysctls); build guide for kernels with extra options | 1, 10 | done (report); planned (build guide) | Building kernels in the app: no (a docs/CI guide instead). |
 | Kernel: search, download, flash | — | Kernel manager: backup of every boot-chain partition first, flash a user-provided AK3 zip or image, keep root (re-patch per manager), restore. Each device run only with the owner's approval | 10 | planned | No kernel catalog hosted by us. |
 | Modules: load modules | Root can run `insmod` by hand | `/lib/modules/$(uname -r)` from the ROM's module dirs (read-only) + `depmod` into a rootfs overlay; `uburoot-kmod` load/unload with revert; out-of-tree builds (`uburoot-kbuild`) | 2 | planned | |
-| SELinux status toggle (Settings) | — | Mode and root context in the doctor; targeted policy fixes first, then a temporary permissive switch with the strongest warning, reverted by *Stop all* | 1, 2 | planned | Never permanent. |
+| SELinux status toggle (Settings) | Doctor shows the mode and the root shell's context | Mode and root context in the doctor; targeted policy fixes first, then a temporary permissive switch with the strongest warning, reverted by *Stop all* | 1, 2 | done (report); planned (switch) | Never permanent. |
 | Kernel logs, tracing, eBPF, tunables | — | `dmesg`/kmsg/pstore viewer, ftrace/trace-cmd, bpftool/bpftrace where BTF exists, perf/simpleperf, tunables with recorded originals | 2 | planned | |
 | Root manager kernel extensions (KPM, KernelSU LKM) | — | Research and expose; differences in `docs/ROOT_IMPLEMENTATIONS.md` | 2 | planned | |
 | **Chroot manager** | | | | | |
@@ -75,7 +75,7 @@ Status: **done** (in a release), **partial**, **planned**, **out** (out of scope
 | Remove | *Reset Ubuntu* (`reset.sh --yes`, typed `DELETE`/`APAGAR`, `ubu_safe_rm`) | Keep, move to the manager screen | 6 | done | |
 | Install metapackages | `apt` by hand | Profiles (see above) | 6 | planned | |
 | — (no NetHunter equivalent) | — | Verify (`dpkg --verify` report), move to another ext4/f2fs location, release upgrade to the next LTS | 6 | planned | |
-| Rootfs versioning / upgrades of integration files | `setup.sh` reruns are idempotent | `/etc/uburoot-release` + numbered migrations | 1 | planned | |
+| Rootfs versioning / upgrades of integration files | `/etc/uburoot-release` (SCHEMA 1), `setup.sh --migrate`, run by the app on start | `/etc/uburoot-release` + numbered migrations | 1 | done | |
 | **Services and commands** | | | | | |
 | Kali Services: start/stop SSH, Apache, OpenVPN…, enable at boot | `/etc/uburoot-boot.d/` scripts run by the boot module | `uburoot-svc` (pidfiles, logs, definitions in `/etc/uburoot/services.d/`), `enable` = the boot.d mechanism; Services screen | 7 | planned | |
 | Default `toor` password warning | No default password: the user picks one in the install form (or passwordless sudo, opt-in) | sshd example service requires a key or the user's own password | 7 | done | |
@@ -107,11 +107,11 @@ Status: **done** (in a release), **partial**, **planned**, **out** (out of scope
 | Metasploit Payload Generator, SET | — | — | — | out | Non-goal (payload generators, social engineering). |
 | Searchsploit, Nmap scan screens | — | Generic tool definitions (Phase 5); nmap bundled as an example | 5 | planned | |
 | Bluetooth Arsenal, CARsenal, Wardriving | — | No dedicated screens; hardware access (Phase 3) and tool definitions (Phase 5) cover the platform side | 3, 5 | planned (platform) | Attack front-ends stay out. |
-| Wi-Fi injection (custom kernel) | — | Doctor lists monitor-capable phys; Wi-Fi takeover with monitor mode where the phy supports it; kernel build guide for drivers | 1, 3, 10 | planned | The S9's internal driver has no monitor mode. |
+| Wi-Fi injection (custom kernel) | Doctor lists Wi-Fi phys and monitor support (S9: none) | Doctor lists monitor-capable phys; Wi-Fi takeover with monitor mode where the phy supports it; kernel build guide for drivers | 1, 3, 10 | done (report); planned | The S9's internal driver has no monitor mode. |
 | **Store, devices, testing** | | | | | |
 | NetHunter Store | — | — | — | out | Non-goal (app store). F-Droid and GitHub releases. |
-| Supported device list (CI-generated kernel/image reports) | Tested: S9 / LineageOS 19.1 / Magisk 31.1 (CLAUDE.md) | `docs/COMPATIBILITY.md`: device, ROM, Android, root manager + version, result, doctor bundle | 1 | planned | |
-| Testing checklist (boot, apps, kernel version, HID, Metasploit, external Wi-Fi) | Device suites: `checks.sh`, `session-test.sh`, `advanced-test.sh` | Checklist in `docs/` built from the suites, with doctor output | 1 | planned | |
+| Supported device list (CI-generated kernel/image reports) | `docs/COMPATIBILITY.md` (S9 row) | `docs/COMPATIBILITY.md`: device, ROM, Android, root manager + version, result, doctor bundle | 1 | done | |
+| Testing checklist (boot, apps, kernel version, HID, Metasploit, external Wi-Fi) | Checklist in `docs/COMPATIBILITY.md`; device suite runs the doctor | Checklist in `docs/` built from the suites, with doctor output | 1 | done | |
 | Porting (kernel builder, patches) | — | Kernel build guide (docs + optional CI recipe) | 10 | planned | Not in the app. |
 
 ## Phase list (`prompt.md`, with the changes proposed here)

@@ -70,11 +70,17 @@ body:
         1. ...
         2. ...
   - type: textarea
-    id: rootinfo
+    id: doctor
     attributes:
-      label: rootinfo output
-      description: "Output of: su --mount-master -c /data/local/uburoot/bin/rootinfo.sh"
+      label: Doctor report
+      description: |
+        In the app: Settings → Diagnostics → Run diagnostics → Share (identifiers are removed
+        unless you tick the box). Without the app:
+        `su --mount-master -c "sh /data/local/uburoot/bin/doctor.sh --redact"`.
+        Read it before posting.
       render: text
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:

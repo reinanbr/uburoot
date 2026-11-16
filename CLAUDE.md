@@ -18,6 +18,19 @@ Play Core, or any proprietary Google dependency.
 | 4 | Android integration (receiver, `uburoot-*` commands, share target) | done (unit 26/26, Docker 116/116; on device: every command as a sudoer and as a non-sudoer, in the background and with the app force-stopped, file/URL open, errors back in the terminal, share of a document/text) |
 | 5 | Boot module (Magisk/KSU/APatch zip) | done (unit 26/26, Docker 138/138, device 53/53; on device: module installed with `magisk --install-module`, toggle saved from Settings, after a reboot `service.sh` → `boot.sh` mounted and ran the script 1 s after `boot_completed`; *Run now*; module removed afterwards) |
 
+### Milestone 2: NetHunter-level platform (`prompt.md`)
+
+The spec is `prompt.md` (full kernel access, full hardware access, Linux GUI apps, tool
+front-ends, chroot manager, kernel manager). The gap analysis and the phase list are in
+`docs/NETHUNTER_PARITY.md`. Each phase stops for the owner's review.
+
+| Phase | Scope | Status |
+|------:|-------|--------|
+| 0 | Gap analysis (`docs/NETHUNTER_PARITY.md`) | done |
+| 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (ships as 0.3.0) |
+| 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit, Docker 182/182, device 60/60; app on the S9: see below) |
+| 2 | Full kernel access (`KERNEL_ACCESS`) | next |
+
 ## Core principle: system logic lives in shell scripts
 
 The app only copies the scripts from `app/src/main/assets/uburoot/bin/` to the device,
@@ -53,12 +66,13 @@ no bashisms; `shellcheck -s sh` must pass.
 | `umount.sh [--kill]` | unmounts everything under `ROOTFS`, deepest first; `umount -l` fallback; exit 1 if anything is left |
 | `enter.sh [user] [cmd]` | `mount.sh`, then `chroot` with a clean env (`env -i`) into `bash -l` or `su - user` |
 | `android-env` | captures Android env into `$ROOTFS/etc/android.env` and writes the wrappers |
-| `install.sh <tar.gz> [sha256]` | checks arch/space, verifies SHA256, extracts with busybox tar into `rootfs.partial`, then renames it |
-| `setup.sh [--user N] ...` | post-install: DNS, hosts, hostname, AID groups, apt sources, locale, sudo, user. `--dns-only` rewrites just `resolv.conf` (Settings → DNS) |
+| `install.sh <tar.gz\|tar.xz> [sha256]` | checks arch/space, verifies SHA256 (64 hex, any case), picks gzip/xz from the magic bytes (a SAF file arrives under a cache name), extracts with busybox tar into `rootfs.partial`, requires `usr/bin/env` + `usr/bin/dpkg` and that dpkg's ELF arch is the CPU's (always, even with `UBU_ALLOW_ANY_ARCH`), then renames it |
+| `setup.sh [--user N] ...` | post-install: DNS, hosts, hostname, AID groups, apt sources, locale, sudo, user, `/etc/uburoot-release`. `--dns-only` rewrites just `resolv.conf` (Settings → DNS); `--sources-only` just the APT sources (Settings → mirror); `--migrate` runs the numbered migrations `migrate_N` from the rootfs's schema up to `UBU_SCHEMA` (the app runs it on every preflight; refused before setup; a newer rootfs is left alone) |
+| `doctor.sh [--redact] [--app-version V]` | read-only report: Root (full-root verdict, caps, seccomp, SELinux context, mount ns), Android, Kernel (config or probes: namespaces, overlayfs, tun, binfmt_misc, gadget functions, GKI, module signing/`sig_enforce`, modversions, vendor `vermagic`, BTF, kprobes/uprobes, restrict sysctls, `security.perf_harden`, host kernel filesystems, Wi-Fi monitor), Hardware (SoC, CPU policies, GPU and DRM/fb nodes, input, ALSA, V4L2, IIO, Wi-Fi, BT HCI, NFC, UDC, USB host, LEDs, power supplies, thermal zones, I2C/SPI/GPIO/serial/modem node counts, and **who holds each node open**: one `ls -l /proc/*/fd`; app processes (uid >= 10000) show as `app`), Storage, Mounts, Network (DNS + mirror TCP only while mounted), Config. `--redact` = `ident()` plus a whole-word awk pass over every identifier. ~11 s on the S9 |
 | `hangup.sh PID` | SIGHUP+SIGCONT to the chroot processes whose controlling tty is PID's stdin (the app passes a session's `su` client when its tab closes) |
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
 | `boot.sh [--now\|--status]` | run by the module's `service.sh`. Without `BOOT_START=1` it does nothing. Waits for shared storage to decrypt (if `MOUNT_SDCARD`, up to 6 h), runs `mount.sh`, then each executable `/etc/uburoot-boot.d/NAME` (`[A-Za-z0-9_-]+`, no symlinks) through `enter.sh root`. A script still running after `BOOT_SCRIPT_TIMEOUT` (60 s) is left running. `--now` skips the wait and `BOOT_START`; `--status` prints `module=enabled\|disabled\|removing\|pending\|missing` (`/data/adb/modules{,_update}/uburoot`, the same for all three managers) and `boot_start=` |
-| `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=` (used by the app) |
+| `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=`, `schema=`/`schema_current=`, and the root report: `cap_last_cap=`, `cap_eff=`, `cap_bnd=`, `no_new_privs=`, `seccomp=`, `full_root=yes\|no`, `selinux=` (used by the app) |
 | `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
 | `chroot-cmd.sh` | installed as `uburoot-cmd`; dispatches on `$0` (`uburoot-notify`... / `xdg-open`) to `uburoot-send`, through `sudo -n` unless root |
 | `bridge.sh` | app side: `take ID DEST` (outbox file → the app's cache file), `import SRC NAME` (into the default user's `~/Shared`, as that user inside the chroot), `cwd DIR` (exit 0 if the default user can enter DIR) |
@@ -67,7 +81,11 @@ Config keys (`uburoot.conf`): `MOUNT_SDCARD`, `ANDROID_INTEGRATION`, `DNS_SERVER
 `DEFAULT_USER`, `INIT_COMMAND`, `UBU_HOSTNAME`, `SDCARD_SOURCE` (optional override),
 `INOTIFY_MAX_WATCHES` (default 524288; `mount.sh` raises
 `fs.inotify.max_user_watches` to it, never lowers it; 0 = leave alone), `BOOT_START`
-(0/1, Settings → Start at boot), `BOOT_SCRIPT_TIMEOUT` (default 60 s, hand edit only).
+(0/1, Settings → Start at boot), `BOOT_SCRIPT_TIMEOUT` (default 60 s, hand edit only),
+`APT_MIRROR` (empty = `ports.ubuntu.com/ubuntu-ports/`, or `archive.ubuntu.com` for
+amd64; `http://host/path/` only, checked by `ubu_valid_mirror` and
+`UbuConfig.isValidMirror`; only the release suites, `-security` always comes from
+Canonical).
 
 Test-only env overrides (never set by the app): `UBU_MODULES` (default `/data/adb`), `UBU_BASE`, `ROOTFS`, `UBU_MOUNTS_FILE`,
 `UBU_INOTIFY_FILE` (Docker: the container's `/proc/sys` is the host's),
@@ -159,7 +177,8 @@ dev machine the default `java-25` is a JRE, so build with
 | `terminal/ExtraKeys`, `TerminalTheme`, `TerminalPrefs`, `Links` | extra keys rows (pointer input, so the IME keeps focus; hold to repeat), color schemes into `TerminalColors.COLOR_SCHEME`, SharedPreferences (theme, font sp), URL in the tapped word |
 | `bridge/CommandReceiver` | exported receiver for `com.reinanbr.uburoot.CMD`, guarded by the signature permission `com.reinanbr.uburoot.permission.CMD`; notify (channel `messages`), toast, vibrate, clip, open URL / file (`bridge.sh take` into `cache/open/<id>/<name>`, FileProvider `${applicationId}.files`, `goAsync`). Answers `RESULT_OK` or 1 + message |
 | `bridge/ShareActivity` + `SharedPaths` | *Open in UbuRoot* (SEND `*/*`, text too): maps the shared item to its dir inside Ubuntu (externalstorage/downloads doc ids, MediaStore `RELATIVE_PATH`/`_data`, `file://`), checks it with `bridge.sh cwd`, else `bridge.sh import`; then a session with `UBU_CWD` |
-| `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor, *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused) |
+| `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor (mirror → `setup.sh --sources-only`), *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused), *Diagnostics* (`doctor.sh`, redacted unless the box is ticked; Share/Copy) |
+| `ui/AboutActivity` | app version, license, source link, NOTICE / GPL / Apache texts from `assets/licenses/` |
 
 - libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
   (`BuilderImpl`). So preflight compares `mnt_ns` with `init_mnt_ns` and refuses if they
@@ -317,6 +336,51 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   Ours only hands over to `install_module`, the same thing Magisk's
   `module_installer.sh` does.
 
+## Milestone 2 decisions and evidence
+
+- **Full-root gate.** `ubu_root_report` (common.sh) reads `/proc/$$/status`: full root =
+  `CapEff` and `CapBnd` equal to every capability up to `cap_last_cap`, `Seccomp 0`,
+  `NoNewPrivs` 0 or absent (the line only exists since Linux 4.10; the S9's 4.9 has
+  none). The preflight refuses otherwise (`Problem.RESTRICTED_ROOT`). Why: KernelSU's
+  App Profile sets `CapEff/CapPrm/CapBnd` from its `capabilities.effective` field
+  (default `CAP_FULL_SET`) and can switch the SELinux domain (default `u:r:ksu:s0`),
+  in `kernel/policy/app_profile.c` `escape_with_root_profile` and
+  `uapi/app_profile.h`, checked 2026-11-16; it always disables seccomp, and
+  `FLAG_KSU_NO_NEW_PRIVS` is KernelSU's own flag, not the kernel's. APatch's `SuProfile`
+  has only `uid`, `to_uid`, `scontext`. On the S9 (Magisk 31.1) root has
+  `CapEff=CapBnd=0x3fffffffff` (`cap_last_cap` 37), Seccomp 0, `u:r:magisk:s0`,
+  enforcing. Docker: `setpriv --bounding-set -sys_module` and `--no-new-privs` both give
+  `full_root=no`.
+- **Rootfs schema.** `UBU_SCHEMA` in common.sh (now 1). `/etc/uburoot-release` holds
+  `SCHEMA`, `INSTALLED` (mtime of `uburoot-setup.done`) and `UBUNTU`. A migration may
+  only rewrite UbuRoot's own files (profile hook, policy-rc.d, AID groups, the iptables
+  selector), never APT sources, users or packages (Docker compares `passwd` and the
+  sources before and after). To add one: bump `UBU_SCHEMA`, write `migrate_N`, extend
+  the Docker "old rootfs" case.
+- **Kernel filesystem binds were moved to Phase 2** (behind `KERNEL_ACCESS`), so Phase 1
+  adds no mounts. On the S9 the host has configfs at **`/config`** (Android 12 init,
+  with `usb_gadget`), debugfs at `/sys/kernel/debug`, tracefs at `/sys/kernel/tracing`,
+  bpffs at `/sys/fs/bpf`; inside the chroot all of them are empty today. No ROM module
+  directory exists and no modules are loaded; `MODULE_SIG_FORCE=y`, `MODVERSIONS=y`.
+  Config: `USER_NS OVERLAY_FS TUN CONFIGFS USB_CONFIGFS{,_NCM,_ACM,_MASS_STORAGE,_F_HID}
+  CFG80211 WIREGUARD BPF_SYSCALL BT` = y; `BINFMT_MISC MAC80211 CAN NF_TABLES
+  USB_CONFIGFS_RNDIS SQUASHFS KVM KPROBES UPROBES DEBUG_INFO_BTF` = n. Sysctls:
+  `kptr_restrict 4`, `dmesg_restrict 0`, `perf_event_paranoid 3`,
+  `unprivileged_bpf_disabled 0`, `security.perf_harden=1`.
+- **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
+  S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
+  the archive signatures anyway). The app copies a SAF file into its cache, then
+  `install.sh` reads the format from the content.
+- **Install wake lock.** A partial wake lock with a 1 h cap during download/extract and
+  `FLAG_KEEP_SCREEN_ON` while the install screen is working (NetHunter's installer
+  warns that Android kills it otherwise).
+- **License.** GPL-3.0-or-later since the commit after v0.2.1 (all earlier commits were
+  by the maintainer, with Claude as co-author; the only PR, #1, is his). `LICENSE` is
+  the gnu.org text (SHA-256 `3972dc97…`), `LICENSES/Apache-2.0.txt` covers Termux's
+  libraries, libsu and AndroidX. `LicenseAssetsTask` copies `LICENSE`, `NOTICE` and
+  `LICENSES/Apache-2.0.txt` into `assets/licenses/` for the About screen. SPDX headers
+  are on our Kotlin, shell and Gradle files, never on `gradlew*` or the wrapper.
+
 ## Root implementations and mount namespaces (verified in source, 2026-11)
 
 User-facing version: [docs/ROOT_IMPLEMENTATIONS.md](docs/ROOT_IMPLEMENTATIONS.md) (keep both
@@ -417,8 +481,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 28 files, guard 13/13, Docker
-  138/138 (Phase 1 result: 17 files, 13/13, 70/70).
+- `tests/run-all.sh`: everything below. Now: shellcheck 30 files, guard 13/13, Docker
+  182/182 (Phase 1 result: 17 files, 13/13, 70/70).
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
 - `tests/test_reset_guard.sh`: critical rule with dummy dirs, a fake mounts table and a

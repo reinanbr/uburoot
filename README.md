@@ -52,11 +52,21 @@ come from a phone set to Brazilian Portuguese.*
 
 Available now:
 
-- **Root check**: detects Magisk, KernelSU or APatch and makes sure commands run in
-  Android's global mount namespace, so every session sees the same mounts.
+- **Root check**: detects Magisk, KernelSU or APatch, makes sure commands run in
+  Android's global mount namespace, so every session sees the same mounts, and that the
+  root is **full root** (every capability, no seccomp). A restricted root (e.g. a
+  KernelSU App Profile with fewer capabilities) is refused with the reason.
 - **Installer**: finds the newest Ubuntu LTS automatically (currently 26.04.1), downloads
-  it (resumable), checks it against Ubuntu's `SHA256SUMS`, then sets up DNS, apt
-  sources, `sudo` and your user.
+  it (resumable, with a wake lock so Android doesn't kill it), checks it against
+  Ubuntu's `SHA256SUMS`, then sets up DNS, apt sources, `sudo` and your user. Under
+  *Advanced*: an APT mirror, or an **offline install** from a `.tar.gz`/`.tar.xz` you
+  pick (optionally with its SHA256). Installs from older UbuRoot versions are upgraded
+  on start.
+- **Diagnostics**: Settings → *Run diagnostics* checks root, the kernel (features, module
+  signing, BTF, tracing, restrictions), the hardware (GPU, audio, cameras, sensors, USB,
+  Wi-Fi, NFC... and which Android process holds each device), storage, mounts and the
+  network. It changes nothing, and the report you share hides IP addresses, names and
+  serial numbers unless you include them.
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).
 - **Android integration**: `/sdcard`, `/data` and the system partitions are available
@@ -75,7 +85,7 @@ Available now:
   and light), copy and paste, tap a link to open it, and hardware keyboard shortcuts:
   Ctrl+Shift+C / V to copy / paste, Ctrl+Shift+T for a new tab.
 - **Settings**: default user, startup command, `/sdcard` and Android-integration mounts,
-  DNS servers, *Repair mounts*, and *Reset Ubuntu*, which asks you to type a
+  DNS servers, APT mirror, *Repair mounts*, and *Reset Ubuntu*, which asks you to type a
   confirmation word and never deletes anything while something is still mounted.
 
 - **Talk to Android from Ubuntu**:
@@ -126,8 +136,9 @@ Available now:
 
 KernelSU, APatch and Android 13+ are supported in the code but **not tested on a device
 yet**. How the three root managers differ (and what UbuRoot does about it) is in
-[docs/ROOT_IMPLEMENTATIONS.md](docs/ROOT_IMPLEMENTATIONS.md). Reports are very welcome. Please include the device, ROM, Android version and root
-manager (with version).
+[docs/ROOT_IMPLEMENTATIONS.md](docs/ROOT_IMPLEMENTATIONS.md). Reports are very welcome:
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) has the device table and a testing
+checklist. Please attach the diagnostics report (Settings → *Run diagnostics* → Share).
 
 ## Install
 
@@ -298,8 +309,8 @@ release APK is unsigned. Keystores never go into the repository.
 
 | Command | Needs | Covers |
 |---------|-------|--------|
-| `tests/run-all.sh` | Docker | shellcheck, the reset safety guard, a real-mount suite in a privileged container (install → setup with real apt → enter → umount → reset) |
-| `tests/device/run.sh [--reset]` | rooted phone over adb, Ubuntu installed | real mounts and propagation, network, wrappers, a sabotaged reset, umount back to the original state |
+| `tests/run-all.sh` | Docker | shellcheck, the reset safety guard, a real-mount suite in a privileged container (install from `.tar.gz`/`.tar.xz` → setup with real apt → migrations, mirror → enter → diagnostics → umount → reset) |
+| `tests/device/run.sh [--reset]` | rooted phone over adb, Ubuntu installed | full root and the diagnostics report, real mounts and propagation, network, wrappers, a sabotaged reset, umount back to the original state |
 | `tests/device/session-test.sh` | run it inside the app's terminal | tty and job control, sudo, network, storage, read-only partitions, package integrity |
 | `tests/device/advanced-test.sh` | run inside Ubuntu as root, dev packages installed | network and Wi-Fi tools, compilers and runtimes, debuggers, sshd |
 

@@ -7,7 +7,29 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Diagnostics (Settings → *Run diagnostics*, or `doctor.sh`): root, Android, kernel
+  features and restrictions, a hardware inventory that says which Android process holds
+  each device, storage, mounts, network and config. Read-only. The shared report hides
+  IP addresses, user and host names and serial numbers unless you include them. The bug
+  report form asks for it.
+- Offline install from a `.tar.gz` or `.tar.xz` picked from storage, with an optional
+  SHA256; the archive must be for the phone's CPU.
+- APT mirror setting (install form and Settings).
+- `/etc/uburoot-release` and numbered migrations: an Ubuntu installed by an older UbuRoot
+  gets its integration files upgraded when the app starts.
+- About screen with the app's and the libraries' licenses.
+- `docs/COMPATIBILITY.md`: tested devices and a device testing checklist.
+- `docs/NETHUNTER_PARITY.md`: comparison with Kali NetHunter and the plan for the next
+  versions.
+
 ### Changed
+
+- UbuRoot now requires full root (every capability, no seccomp, no `no_new_privs`) and
+  says why when the root manager hands out less.
+- The installer holds a wake lock during download and extraction, and keeps the screen
+  on while it works.
 
 - Relicensed from the Apache License 2.0 to the GNU GPL v3.0 or later. Releases up to and
   including v0.2.1 remain available under the Apache License 2.0. The third-party

@@ -36,6 +36,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Unmounting took about 2 minutes on phones with Magisk's Zygisk enabled: its magic
+  mount puts about 1000 per-file mounts under `/system/lib*`, and they were unmounted one
+  at a time. Each Android partition tree is now detached at once; it takes 1 s.
+
 - Closing a session left its shell running inside Ubuntu: util-linux `su`, the session
   leader, blocks SIGHUP. `hangup.sh` now signals the session's processes.
 - *Stop all* took about 40 s on the test phone; now about 5 s. Finding the chroot's

@@ -16,7 +16,7 @@ Play Core, or any proprietary Google dependency.
 | 2 | App MVP: root check, installer, one terminal session | done (unit 17/17; on device: clean install discover→download→SHA256→extract→setup→terminal, resume after a kill, apt as the user; device suite 59/59 incl. real reset; in-app session suite 35/35, host root identical to baseline after umount; dev/network suite 54/54; R8 release build verified on device) |
 | 3 | Multiple sessions, foreground service, extra keys, settings | done (unit 22/22, Docker 90/90, device 53/53; on device: tabs, extra keys incl. sticky CTRL, links, themes, notification actions, wake lock, settings save/DNS/repair, Stop all in ~5 s, preflight waits for Stop all) |
 | 4 | Android integration (receiver, `uburoot-*` commands, share target) | done (unit 26/26, Docker 116/116; on device: every command as a sudoer and as a non-sudoer, in the background and with the app force-stopped, file/URL open, errors back in the terminal, share of a document/text) |
-| 5 | Boot module (Magisk/KSU/APatch zip) | in progress (unit 26/26, Docker 138/138; device test pending) |
+| 5 | Boot module (Magisk/KSU/APatch zip) | done (unit 26/26, Docker 138/138, device 53/53; on device: module installed with `magisk --install-module`, toggle saved from Settings, after a reboot `service.sh` → `boot.sh` mounted and ran the script 1 s after `boot_completed`; *Run now*; module removed afterwards) |
 
 ## Core principle: system logic lives in shell scripts
 
@@ -105,8 +105,14 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
   `umount -R` bug that `arch-chroot` works around with `--make-rslave`). The Docker
   suite's control experiment reproduces this hazard on a real kernel. If the
   busybox/toybox in use can't set propagation flags, `mount.sh` aborts.
-- `umount.sh` first runs `--make-rprivate` on everything under `ROOTFS`, then unmounts
-  deepest first. This way no umount can propagate out.
+- `umount.sh` first runs `--make-rprivate` on everything under `ROOTFS`, then detaches
+  each Android-partition rbind tree with one `umount -l` (`MNT_DETACH` is recursive), then
+  unmounts the rest deepest first. This way no umount can propagate out. The lazy
+  detach matters with **Magisk Zygisk**: magic mount puts a tmpfs over `/system/lib` and
+  `/system/lib64` and binds every original file back. On the test phone that meant 1068
+  host mounts and 1010 under the rootfs. One-by-one unmounting took 127 s, the detach
+  takes 1 s, and the host table stayed identical. `ubu_is_mounted` is a single `awk`
+  now; the old shell `read` loop over ~2000 lines per call was the real cost.
 - Mounts: `proc`, `sysfs`, `/dev` (bind), `/dev/pts` (bind), `/dev/shm` (tmpfs),
   `/run` (tmpfs); `[MOUNT_SDCARD]` `/sdcard` (bind); `[ANDROID_INTEGRATION]`
   `/system /vendor /product /system_ext /odm /apex /linkerconfig` (rbind, same paths;
@@ -252,6 +258,15 @@ dev machine the default `java-25` is a JRE, so build with
 - Reading the clipboard with `service call clipboard` as root **clears it** ("Could
   not grant permission to primary clip. Clearing clipboard"). Check a clip by pasting
   into the terminal instead.
+- Boot test on the device (2026-11-16): the S9's `/data` is **unencrypted**
+  (`ro.crypto.state=unencrypted`), so the wait for the first unlock never happened.
+  That path is untested on a device. On FBE phones `sys.user.0.ce_available` turns
+  `true` after the unlock, and `boot.sh` checks the shared-storage directories, which
+  also works in Docker. Processes started at boot run as `u:r:magisk:s0` and outside
+  the app's cgroup, so a force-stop of the app doesn't kill them, but *Stop all*
+  (`umount.sh --kill`) does.
+- Toybox `sed` doesn't understand `\x27`; write config lines with plain values (`KEY=0`
+  is valid shell and `ShellAssignments` reads it).
 - KDoc gotcha: Kotlin block comments nest, so a comment containing
   `/etc/uburoot-boot.d/*` opens a nested comment that swallows the code after it
   (the compiler only reports "unresolved reference"). Don't write `/*` inside comments.

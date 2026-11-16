@@ -64,7 +64,7 @@ fi
 kcfg() {
     printf '%s\n' "$CFG" | bb awk -F= -v k="CONFIG_$1" '$1 == k { v = $2 } END { print (v == "" ? "n" : v) }'
 }
-# shellcheck disable=SC2329 # used as a probe command by cap()
+# shellcheck disable=SC2317,SC2329 # used as a probe command by cap()
 in_fs() { bb grep -qw "$1" /proc/filesystems 2>/dev/null; }
 CONFIGFS=$(ubu_fs_mount configfs /sys/kernel/config)
 
@@ -87,13 +87,13 @@ cap() {
     fi
 }
 
-# shellcheck disable=SC2329 # used as a probe command by cap()
+# shellcheck disable=SC2317,SC2329 # used as a probe command by cap()
 tracing_file() { [ -e "/sys/kernel/tracing/$1" ] || [ -e "/sys/kernel/debug/tracing/$1" ]; }
 
 # A vendor kernel module (.ko) of this ROM, for its vermagic.
 vendor_module() {
     for _d in "$(ubu_module_dir 2>/dev/null)" /vendor_dlkm/lib/modules /vendor/lib/modules /system_dlkm/lib/modules /odm/lib/modules; do
-        [ -n "$_d" ] && [ -d "$_d" ] || continue
+        if [ -z "$_d" ] || [ ! -d "$_d" ]; then continue; fi
         for _f in "$_d"/*.ko; do
             [ -f "$_f" ] && { printf '%s' "$_f"; return 0; }
         done
@@ -156,7 +156,7 @@ names() {
     _out=""
     for _e in "$1"/*; do
         [ -d "$_e" ] || continue
-        _v=$(cat "$_e/$2" 2>/dev/null | head -n 1)
+        _v=$(head -n 1 "$_e/$2" 2>/dev/null)
         _out="$_out${_out:+, }${_e##*/}${_v:+ ($_v)}"
     done
     printf '%s' "${_out:-none}"

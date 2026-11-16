@@ -300,7 +300,7 @@ write_release() {
 # migrate_N brings a rootfs from schema N-1 to N. Each must be idempotent and
 # touch only UbuRoot's own files (never apt sources, users or packages).
 # 0 -> 1: rootfs set up by 0.1.x/0.2.x, before /etc/uburoot-release existed.
-# shellcheck disable=SC2329 # called as "migrate_$_n" below
+# shellcheck disable=SC2317,SC2329 # called as "migrate_$_n" below (SC2317 in older shellcheck)
 migrate_1() {
     write_service_files
     write_groups

@@ -20,3 +20,4 @@ dist/
 # Signing keys never go in the repo (release key: CI secrets)
 *.jks
 *.keystore
+.kotlin/

@@ -1,0 +1,1 @@
+Now GPL-3.0-or-later. New: diagnostics report (root, kernel, hardware, mounts, network; identifiers hidden when shared), offline install from a .tar.gz/.tar.xz, APT mirror setting, full-root check, automatic upgrade of older installs, About screen with licenses.

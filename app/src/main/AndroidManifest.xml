@@ -9,6 +9,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Optional wake lock / Wi-Fi lock from the notification ("Acquire wake lock"). -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- uburoot-vibrate. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- Guards the uburoot-* command receiver. Signature level: only this app,
+         the system and root (uid 0 passes every permission check) may send. -->
+    <permission
+        android:name="com.reinanbr.uburoot.permission.CMD"
+        android:description="@string/permission_cmd_description"
+        android:label="@string/permission_cmd_label"
+        android:protectionLevel="signature" />
 
     <application
         android:name=".UbuRootApp"
@@ -41,6 +51,45 @@
             android:name=".ui.SettingsActivity"
             android:exported="false"
             android:label="@string/settings_title" />
+
+        <!-- "Open in UbuRoot": a session in the shared file's directory. Its own
+             (empty) affinity: it never becomes the root of the terminal's task,
+             whose root intent would then swallow the next share. -->
+        <activity
+            android:name=".bridge.ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_label"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <!-- uburoot-notify/toast/vibrate/clip/open (am broadcast from the root
+             helper inside Ubuntu). -->
+        <receiver
+            android:name=".bridge.CommandReceiver"
+            android:exported="true"
+            android:permission="com.reinanbr.uburoot.permission.CMD">
+            <intent-filter>
+                <action android:name="com.reinanbr.uburoot.CMD" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Files from uburoot-open, handed to viewers as content:// URIs. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <!-- A terminal emulator has no matching foreground service type: the
              shells are user-started, long-running processes (specialUse). -->

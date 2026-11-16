@@ -41,12 +41,14 @@ object SessionManager {
     private val scope = MainScope()
 
     /**
-     * A new chroot session. [user] null = DEFAULT_USER from uburoot.conf.
+     * A new chroot session. [user] null = DEFAULT_USER from uburoot.conf;
+     * [cwd] = start directory inside Ubuntu (enter.sh's UBU_CWD).
      * The command must be ONE string after -c: Magisk joins trailing args,
      * but ksud/apd only take the value of -c (see CLAUDE.md).
      */
-    fun create(context: Context, user: String? = null): TerminalSession {
-        val cmd = UbuPaths.script("enter.sh") + (user?.let { " " + Sh.quote(it) } ?: "")
+    fun create(context: Context, user: String? = null, cwd: String? = null): TerminalSession {
+        val cmd = (cwd?.let { "UBU_CWD=${Sh.quote(it)} " } ?: "") +
+            UbuPaths.script("enter.sh") + (user?.let { " " + Sh.quote(it) } ?: "")
         val app = context.applicationContext
         val session = TerminalSession(
             "su",

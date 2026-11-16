@@ -100,4 +100,22 @@
     <string name="notice_repair_failed">O reparo falhou; veja o log abaixo.</string>
     <string name="notice_reset_refused">Reset recusado: ainda há algo montado dentro do Ubuntu. Nada foi apagado.</string>
     <string name="notice_reset_failed">O reset falhou; veja o log abaixo.</string>
+
+    <!-- Fase 4: ponte Android <-> Ubuntu -->
+    <string name="permission_cmd_label">enviar comandos ao UbuRoot</string>
+    <string name="permission_cmd_description">Permite que os comandos do Ubuntu (uburoot-notify, uburoot-open…) mostrem notificações, copiem texto e abram arquivos pelo UbuRoot.</string>
+    <string name="bridge_channel">Mensagens do Ubuntu</string>
+    <string name="bridge_notifications_off">as notificações do UbuRoot estão desativadas (Configurações do Android → Apps → UbuRoot → Notificações)</string>
+    <string name="bridge_no_vibrator">este aparelho não tem vibração</string>
+    <string name="bridge_bad_url">não é uma URL: %1$s</string>
+    <string name="bridge_bad_request">pedido inválido vindo do Ubuntu</string>
+    <string name="bridge_take_failed">não foi possível pegar o arquivo: %1$s</string>
+    <string name="bridge_no_app">nenhum app consegue abrir %1$s</string>
+    <string name="bridge_unknown_command">comando desconhecido: %1$s</string>
+    <string name="bridge_timeout">o UbuRoot demorou demais para abrir o arquivo</string>
+    <string name="share_label">Abrir no UbuRoot</string>
+    <string name="share_working">Abrindo no UbuRoot…</string>
+    <string name="share_failed">Não foi possível abrir o arquivo compartilhado no Ubuntu: %1$s</string>
+    <string name="share_nothing">nada para abrir</string>
+    <string name="share_text_name">texto-compartilhado.txt</string>
 </resources>

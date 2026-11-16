@@ -102,4 +102,22 @@
     <string name="notice_repair_failed">Repair failed; see the log below.</string>
     <string name="notice_reset_refused">Reset refused: something is still mounted inside Ubuntu. Nothing was deleted.</string>
     <string name="notice_reset_failed">Reset failed; see the log below.</string>
+
+    <!-- Phase 4: Android <-> Ubuntu bridge -->
+    <string name="permission_cmd_label">send UbuRoot commands</string>
+    <string name="permission_cmd_description">Lets the Ubuntu commands (uburoot-notify, uburoot-open…) show notifications, copy text and open files through UbuRoot.</string>
+    <string name="bridge_channel">Messages from Ubuntu</string>
+    <string name="bridge_notifications_off">notifications are turned off for UbuRoot (Android settings → Apps → UbuRoot → Notifications)</string>
+    <string name="bridge_no_vibrator">this device has no vibrator</string>
+    <string name="bridge_bad_url">not a URL: %1$s</string>
+    <string name="bridge_bad_request">bad request from Ubuntu</string>
+    <string name="bridge_take_failed">could not take the file: %1$s</string>
+    <string name="bridge_no_app">no app can open %1$s</string>
+    <string name="bridge_unknown_command">unknown command: %1$s</string>
+    <string name="bridge_timeout">UbuRoot took too long to open the file</string>
+    <string name="share_label">Open in UbuRoot</string>
+    <string name="share_working">Opening in UbuRoot…</string>
+    <string name="share_failed">Could not open the shared file in Ubuntu: %1$s</string>
+    <string name="share_nothing">nothing to open</string>
+    <string name="share_text_name">shared-text.txt</string>
 </resources>

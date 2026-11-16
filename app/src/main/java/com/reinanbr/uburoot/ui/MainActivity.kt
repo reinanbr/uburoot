@@ -1,5 +1,6 @@
 package com.reinanbr.uburoot.ui
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -26,7 +27,8 @@ class MainActivity : ComponentActivity() {
                 val log by vm.log.collectAsStateWithLifecycle()
                 LaunchedEffect(stage) {
                     if (stage == Stage.Ready) {
-                        startActivity(Intent(this@MainActivity, TerminalActivity::class.java))
+                        val cwd = intent.getStringExtra(EXTRA_CWD)
+                        startActivity(TerminalActivity.intent(this@MainActivity, newSession = cwd != null, cwd = cwd))
                         finish()
                     }
                 }
@@ -38,5 +40,14 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    companion object {
+        private const val EXTRA_CWD = "cwd"
+
+        /** The preflight in a fresh task; then a session in [cwd] (a path inside Ubuntu), if given. */
+        fun intent(context: Context, cwd: String? = null): Intent = Intent(context, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+            .apply { if (cwd != null) putExtra(EXTRA_CWD, cwd) }
     }
 }

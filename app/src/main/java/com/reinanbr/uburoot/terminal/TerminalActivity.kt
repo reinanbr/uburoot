@@ -136,13 +136,13 @@ class TerminalActivity : ComponentActivity() {
     private fun handleIntent(intent: Intent?, fresh: Boolean) {
         val wantsNew = fresh && intent?.getBooleanExtra(EXTRA_NEW_SESSION, false) == true
         if (SessionManager.sessions.isEmpty() || wantsNew) {
-            newSession(intent?.getStringExtra(EXTRA_USER))
+            newSession(intent?.getStringExtra(EXTRA_USER), intent?.getStringExtra(EXTRA_CWD)?.takeIf { fresh })
         } else {
             select(current?.takeIf { it in SessionManager.sessions } ?: SessionManager.sessions.last())
         }
     }
 
-    private fun newSession(user: String? = null) = select(SessionManager.create(this, user))
+    private fun newSession(user: String? = null, cwd: String? = null) = select(SessionManager.create(this, user, cwd))
 
     private fun select(session: TerminalSession) {
         terminalView.attachSession(session)
@@ -524,13 +524,18 @@ class TerminalActivity : ComponentActivity() {
     companion object {
         private const val EXTRA_NEW_SESSION = "new_session"
         private const val EXTRA_USER = "user"
+        private const val EXTRA_CWD = "cwd"
         private const val MIN_TEXT_SP = 6f
         private const val MAX_TEXT_SP = 40f
 
-        fun intent(context: Context, newSession: Boolean, user: String? = null): Intent =
+        /** [cwd]: start directory of the new session (a path inside Ubuntu). */
+        fun intent(context: Context, newSession: Boolean, user: String? = null, cwd: String? = null): Intent =
             Intent(context, TerminalActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 .putExtra(EXTRA_NEW_SESSION, newSession)
-                .apply { if (user != null) putExtra(EXTRA_USER, user) }
+                .apply {
+                    if (user != null) putExtra(EXTRA_USER, user)
+                    if (cwd != null) putExtra(EXTRA_CWD, cwd)
+                }
     }
 }

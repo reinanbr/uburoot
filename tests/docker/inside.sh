@@ -39,6 +39,16 @@ mkdir -p /system/bin /system/product /vendor/lib64 /linkerconfig
 cp /usr/bin/mksh /system/bin/sh # like Android: sh lives in /system
 cat >/system/bin/am <<'EOF'
 #!/system/bin/sh
+if [ "$1" = broadcast ]; then
+    # Fake receiver: log the caller's uid and every argument, answer like the app.
+    # mksh builtins only: the Android PATH in the chroot has no printf.
+    { echo "uid=$USER_ID"; for a in "$@"; do print -r -- "[$a]"; done; } >>/data/am-broadcast.log
+    case "$*" in
+        *FAILME*) echo 'Broadcast completed: result=1, data="no app can open FAILME"' ;;
+        *) echo "Broadcast completed: result=-1" ;;
+    esac
+    exit 0
+fi
 echo "AM_OK BCP=$BOOTCLASSPATH SSCP=$SYSTEMSERVERCLASSPATH LD=${LD_LIBRARY_PATH:-unset} args=$*"
 EOF
 chmod 755 /system/bin/am
@@ -158,6 +168,53 @@ out=$(echo 'echo INTERACTIVE_OK; exit' | $B/enter.sh tester 2>&1)
 check "login shell + INIT_COMMAND" sh -c "printf '%s' \"\$1\" | tr '\n' ' ' | grep -q 'INIT_RAN_tester INTERACTIVE_OK'" _ "$out"
 rm -f /data/local/uburoot/uburoot.conf
 check "invalid user rejected" sh -c "! $B/enter.sh 'bad;user' true"
+
+section "app bridge: uburoot-* commands (fake am)"
+: >/data/am-broadcast.log
+bl() { cat /data/am-broadcast.log; }
+check "commands installed (+ xdg-open)" sh -c "[ -x $R/usr/local/bin/uburoot-notify ] && [ -x $R/usr/local/bin/xdg-open ] && [ -x $R/usr/local/lib/uburoot/uburoot-send ]"
+check "sudo rule installed (0440)" sh -c "[ \"\$(stat -c %a $R/etc/sudoers.d/80-uburoot)\" = 440 ]"
+check "uburoot-notify as the user" $B/enter.sh tester 'uburoot-notify "Hi there" "body text"'
+check "broadcast sent as root to the receiver" sh -c "bl() { cat /data/am-broadcast.log; }; bl | grep -qx uid=0 && bl | grep -qx '\[com.reinanbr.uburoot/.bridge.CommandReceiver\]' && bl | grep -qx '\[Hi there\]' && bl | grep -qx '\[body text\]'"
+: >/data/am-broadcast.log
+check "uburoot-clip from stdin" $B/enter.sh tester 'printf "line1\nline2\n" | uburoot-clip'
+check "clip text kept its newline" sh -c "grep -qx '\[line1' /data/am-broadcast.log && grep -qx 'line2\]' /data/am-broadcast.log"
+check "xdg-open URL" $B/enter.sh tester 'xdg-open https://example.com/x'
+check "URL passed as url extra" grep -qx '\[https://example.com/x\]' /data/am-broadcast.log
+check "app error reaches the user (rc != 0)" sh -c "! $B/enter.sh tester 'uburoot-toast FAILME'"
+out=$($B/enter.sh tester 'uburoot-toast FAILME' 2>&1)
+check "app error message shown" sh -c "printf '%s' \"\$1\" | grep -q 'no app can open FAILME'" _ "$out"
+check "vibrate rejects non-numbers" sh -c "! $B/enter.sh tester 'uburoot-vibrate abc'"
+: >/data/am-broadcast.log
+$B/enter.sh tester 'echo HELLO-OPEN >~/doc.txt && uburoot-open doc.txt' >/dev/null 2>&1
+oid=$(grep -A1 -x '\[id\]' /data/am-broadcast.log | tail -1 | tr -d '[]')
+check "uburoot-open: id + name sent" sh -c "printf '%s' '$oid' | grep -qE '^[0-9a-f]{16}\$' && grep -qx '\[doc.txt\]' /data/am-broadcast.log"
+check "outbox file root-only with the content" sh -c "[ \"\$(stat -c '%u %a' $R/var/lib/uburoot/outbox/$oid)\" = '0 600' ] && grep -qx HELLO-OPEN $R/var/lib/uburoot/outbox/$oid"
+: >/tmp/taken && chmod 600 /tmp/taken
+check "bridge.sh take" $B/bridge.sh take "$oid" /tmp/taken
+check "take copied and emptied the outbox" sh -c "grep -qx HELLO-OPEN /tmp/taken && [ ! -e $R/var/lib/uburoot/outbox/$oid ]"
+check "take rejects a bad id" sh -c "! $B/bridge.sh take ../../etc/passwd /tmp/taken"
+n0=$(find $R/var/lib/uburoot/outbox -type f | wc -l)
+check "open refuses what the user can't read" sh -c "! $B/enter.sh tester 'uburoot-open /etc/shadow'"
+check "no outbox file left by the refused open" test "$(find $R/var/lib/uburoot/outbox -type f | wc -l)" = "$n0"
+echo "DEFAULT_USER='tester'" >/data/local/uburoot/uburoot.conf
+echo SHARED-DATA >/tmp/share.bin
+out=$($B/bridge.sh import /tmp/share.bin "my file.txt" 2>/dev/null)
+check "bridge.sh import prints ~/Shared" test "$out" = /home/tester/Shared
+check "imported file owned by the user" sh -c "[ \"\$(stat -c %u '$R/home/tester/Shared/my file.txt')\" = 9000 ] && grep -qx SHARED-DATA '$R/home/tester/Shared/my file.txt'"
+$B/bridge.sh import /tmp/share.bin "my file.txt" >/dev/null 2>&1
+check "second import gets a new name" test -f "$R/home/tester/Shared/1-my file.txt"
+# A symlinked ~/Shared must not let root write outside the chroot.
+mkdir -p /hostonly && chmod 777 /hostonly
+$B/enter.sh tester 'rm -rf ~/Shared && ln -s /hostonly ~/Shared' >/dev/null 2>&1
+$B/bridge.sh import /tmp/share.bin evil >/dev/null 2>&1
+check "symlinked ~/Shared: nothing written on the host" test -z "$(ls -A /hostonly)"
+$B/enter.sh tester 'rm -f ~/Shared' >/dev/null 2>&1
+check "bridge.sh cwd: the user's home" $B/bridge.sh cwd /home/tester
+check "bridge.sh cwd: /sdcard (bind-mounted)" $B/bridge.sh cwd /sdcard/Download
+check "bridge.sh cwd: /root refused for the user" sh -c "! $B/bridge.sh cwd /root"
+check "bridge.sh cwd: relative path refused" sh -c "! $B/bridge.sh cwd home/tester"
+rm -f /data/local/uburoot/uburoot.conf
 
 section "hangup.sh (closing one terminal tab)"
 # A real pty, as the app's sessions have: script(1) runs enter.sh on one.

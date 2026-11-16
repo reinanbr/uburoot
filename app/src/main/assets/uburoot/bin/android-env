@@ -20,7 +20,7 @@ WRAP_DIR="$R/usr/local/bin"
 # Binder shell commands get a wrapper each (only those present on the device).
 WRAPPERS="am pm cmd settings dumpsys getprop wm input content svc appops"
 # Bump when the generated wrappers change, so --if-needed regenerates them.
-WRAP_VERSION=3
+WRAP_VERSION=4
 RUNNER_DIR="$R/usr/local/lib/uburoot"
 
 VARS="ANDROID_ROOT ANDROID_DATA ANDROID_ART_ROOT ANDROID_I18N_ROOT ANDROID_TZDATA_ROOT
@@ -29,11 +29,37 @@ BOOTCLASSPATH DEX2OATBOOTCLASSPATH SYSTEMSERVERCLASSPATH STANDALONE_SYSTEMSERVER
 
 ANDROID_PATH=/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin
 
+# App bridge (Phase 4): uburoot-notify/toast/vibrate/clip/open and xdg-open.
+# A chroot user's uid holds no Android permission, so `am broadcast` to the
+# app's signature-protected receiver must come from root: the commands go
+# through one root helper that sudo allows to everyone (see chroot-send.sh).
+# Installed on every run (cheap), so script updates arrive without a
+# WRAP_VERSION bump.
+ubu_install_file() { # SRC DEST MODE
+    cp -f "$1" "$2.tmp" && chown 0:0 "$2.tmp" && chmod "$3" "$2.tmp" && mv -f "$2.tmp" "$2"
+}
+ubu_install_bridge() {
+    mkdir -p "$RUNNER_DIR" "$WRAP_DIR" || return 1
+    ubu_install_file "$UBU_BIN_DIR/chroot-send.sh" "$RUNNER_DIR/uburoot-send" 755 || return 1
+    ubu_install_file "$UBU_BIN_DIR/chroot-cmd.sh" "$RUNNER_DIR/uburoot-cmd" 755 || return 1
+    for _c in uburoot-notify uburoot-toast uburoot-vibrate uburoot-clip uburoot-open xdg-open; do
+        ln -sf ../lib/uburoot/uburoot-cmd "$WRAP_DIR/$_c" || return 1
+    done
+    [ -d "$R/etc/sudoers.d" ] || return 0
+    _sf="$R/etc/sudoers.d/80-uburoot"
+    printf '%s\n' \
+        '# Written by UbuRoot android-env: every user may send uburoot-* commands' \
+        '# to the Android app. The helper reads files as the calling user.' \
+        'ALL ALL=(root) NOPASSWD: /usr/local/lib/uburoot/uburoot-send' >"$_sf.tmp" || return 1
+    chmod 440 "$_sf.tmp" && mv -f "$_sf.tmp" "$_sf"
+}
+
 _fp=$(getprop ro.build.fingerprint 2>/dev/null) || _fp=""
 
 if [ "${1:-}" = --if-needed ] && [ -s "$ENV_FILE" ]; then
     if grep -qxF "# fingerprint=$_fp" "$ENV_FILE" 2>/dev/null &&
         grep -qxF "# wrappers=$WRAP_VERSION" "$ENV_FILE" 2>/dev/null; then
+        ubu_install_bridge || ubu_warn "cannot install the uburoot-* commands"
         exit 0
     fi
 fi
@@ -153,6 +179,8 @@ EOF
 if ! { chmod 755 "$WRAP_DIR/android.tmp" && mv -f "$WRAP_DIR/android.tmp" "$WRAP_DIR/android"; }; then
     ubu_warn "wrapper android failed"
 fi
+
+ubu_install_bridge || ubu_warn "cannot install the uburoot-* commands"
 
 ubu_log "android env captured ($(grep -c '^export' "$ENV_FILE") vars), wrappers in /usr/local/bin"
 exit 0

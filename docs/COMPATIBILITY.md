@@ -14,7 +14,7 @@ report (a gist, or the issue/PR where you posted it).
 
 | Device | SoC | ROM | Android | Kernel | Root manager | UbuRoot | Result | Doctor report |
 |--------|-----|-----|---------|--------|--------------|---------|--------|---------------|
-| Samsung Galaxy S9 (SM-G9600, `starqltechn`) | Snapdragon 845 / Adreno 630 | LineageOS 19.1 | 12 | 4.9 (vendor, not GKI) | Magisk 31.1 | 0.3.0-dev | Everything in the checklist passes. Not tested: recovery install, FBE boot wait (`/data` is unencrypted) | maintainer's runs, summarized in `CLAUDE.md` |
+| Samsung Galaxy S9 (SM-G9600, `starqltechn`) | Snapdragon 845 / Adreno 630 | LineageOS 19.1 | 12 | 4.9 (vendor, not GKI) | Magisk 31.1 | 0.3.0 | Everything in the checklist passes. Not tested: recovery install, FBE boot wait (`/data` is unencrypted) | maintainer's runs, summarized in `CLAUDE.md` |
 
 Not tested on any device yet: KernelSU, APatch, Android 13 or newer, GKI kernels,
 Mali GPUs, encrypted (FBE) `/data` with boot start.

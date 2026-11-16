@@ -221,4 +221,25 @@
     <string name="hw_wakelock">Keep the phone awake (wake lock)</string>
     <string name="hw_changes_hint">Kernel and hardware changes share one log: this reverts both, as Stop all does.</string>
     <string name="hw_revert_body">Undo every recorded kernel and hardware change, newest first: device permissions, CPU settings, wake lock, Wi-Fi takeover, kernel settings, SELinux, modules.</string>
+    <string name="hwbridge_channel">Hardware bridges</string>
+    <string name="hwbridge_title">Hardware bridges on</string>
+    <string name="hwbridge_starting">Starting…</string>
+    <string name="hwbridge_stop">Turn off</string>
+    <string name="hwbridge_stopping">Stop all is still running. Try again in a moment.</string>
+    <string name="hw_bridges">Bridges (Android → Ubuntu)</string>
+    <string name="hw_bridges_hint">Android keeps these devices and the app serves them to Ubuntu: uburoot-audio, uburoot-camera, uburoot-sensors, uburoot-gps. Root may use them; a user needs the class granted above (audio, camera, sensors, location). They stay on while the app runs; Stop all turns them off.</string>
+    <string name="hw_bridge_audio">Audio (speaker, microphone)</string>
+    <string name="hw_bridge_camera">Camera</string>
+    <string name="hw_bridge_sensors">Sensors</string>
+    <string name="hw_bridge_location">Location (GPS)</string>
+    <string name="hw_bridge_denied">%1$s: permission denied. Allow it in Android\'s app settings.</string>
+    <string name="hw_gadget">USB gadget</string>
+    <string name="hw_gadget_hint">Adds functions to the phone\'s USB port, next to adb: a network link (NCM), a serial port (ACM), a keyboard and mouse (HID). A disk image: uburoot-hw gadget on storage FILE. Android\'s own functions are never removed.</string>
+    <string name="hw_gadget_active">UbuRoot functions: %1$s</string>
+    <string name="hw_gadget_ncm">Add a network link (NCM)</string>
+    <string name="hw_gadget_acm">Add a serial port (ACM)</string>
+    <string name="hw_gadget_hid">Add a keyboard and mouse (HID)</string>
+    <string name="hw_gadget_off">Remove UbuRoot\'s functions</string>
+    <string name="hw_gadget_confirm_title">Change the USB gadget?</string>
+    <string name="hw_gadget_confirm_body">The USB port reconnects: a computer sees the new function next to adb, and adb over USB drops for a few seconds. Remove, Revert changes and Stop all put Android\'s configuration back.</string>
 </resources>

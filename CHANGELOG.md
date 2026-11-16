@@ -39,6 +39,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Thermal, charger and battery settings stay read-only.
 - Hardware screen (menu → Hardware): classes with grant/revoke for the default user,
   Wi-Fi takeover, CPU and battery, wake lock, revert.
+- **Bridges** (Hardware screen → Bridges): Android's speaker and microphone
+  (`uburoot-audio`, raw PCM or a PulseAudio sink/source), cameras (`uburoot-camera`:
+  photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
+  gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
+  root and the users granted the class.
+- **USB gadget** (`uburoot-hw gadget`, Hardware screen): a network link (NCM), a serial
+  port (ACM), a keyboard and mouse (HID) and a disk image next to adb on the phone's USB
+  port; recorded and undone like every other change.
 - `docs/HARDWARE.md`.
 
 ## [0.3.0] - 2026-11-16

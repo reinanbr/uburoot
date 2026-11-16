@@ -219,4 +219,25 @@
     <string name="hw_wakelock">Manter o celular acordado (wake lock)</string>
     <string name="hw_changes_hint">Mudanças de kernel e de hardware ficam no mesmo registro: isto desfaz as duas, como Parar tudo.</string>
     <string name="hw_revert_body">Desfaz todas as mudanças registradas de kernel e de hardware, da mais nova para a mais antiga: permissões de dispositivos, CPU, wake lock, Wi-Fi tomado, configurações do kernel, SELinux, módulos.</string>
+    <string name="hwbridge_channel">Pontes de hardware</string>
+    <string name="hwbridge_title">Pontes de hardware ligadas</string>
+    <string name="hwbridge_starting">Iniciando…</string>
+    <string name="hwbridge_stop">Desligar</string>
+    <string name="hwbridge_stopping">O Parar tudo ainda está em andamento. Tente de novo em instantes.</string>
+    <string name="hw_bridges">Pontes (Android → Ubuntu)</string>
+    <string name="hw_bridges_hint">O Android fica com estes dispositivos e o app os serve ao Ubuntu: uburoot-audio, uburoot-camera, uburoot-sensors, uburoot-gps. O root pode usá-los; um usuário precisa da classe liberada acima (audio, camera, sensors, location). Ficam ligadas enquanto o app roda; o Parar tudo as desliga.</string>
+    <string name="hw_bridge_audio">Áudio (alto-falante, microfone)</string>
+    <string name="hw_bridge_camera">Câmera</string>
+    <string name="hw_bridge_sensors">Sensores</string>
+    <string name="hw_bridge_location">Localização (GPS)</string>
+    <string name="hw_bridge_denied">%1$s: permissão negada. Libere-a nas configurações do app no Android.</string>
+    <string name="hw_gadget">Gadget USB</string>
+    <string name="hw_gadget_hint">Adiciona funções à porta USB do celular, ao lado do adb: uma rede (NCM), uma porta serial (ACM), um teclado e mouse (HID). Uma imagem de disco: uburoot-hw gadget on storage ARQUIVO. As funções do próprio Android nunca são removidas.</string>
+    <string name="hw_gadget_active">Funções do UbuRoot: %1$s</string>
+    <string name="hw_gadget_ncm">Adicionar uma rede (NCM)</string>
+    <string name="hw_gadget_acm">Adicionar uma porta serial (ACM)</string>
+    <string name="hw_gadget_hid">Adicionar teclado e mouse (HID)</string>
+    <string name="hw_gadget_off">Remover as funções do UbuRoot</string>
+    <string name="hw_gadget_confirm_title">Alterar o gadget USB?</string>
+    <string name="hw_gadget_confirm_body">A porta USB reconecta: um computador vê a nova função ao lado do adb, e o adb por USB cai por alguns segundos. Remover, Reverter alterações e Parar tudo devolvem a configuração do Android.</string>
 </resources>

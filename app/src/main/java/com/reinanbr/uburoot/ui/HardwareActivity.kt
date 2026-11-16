@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +50,7 @@ import com.reinanbr.uburoot.R
 import com.reinanbr.uburoot.hardware.HardwareState
 import com.reinanbr.uburoot.hardware.HardwareViewModel
 import com.reinanbr.uburoot.hardware.HwClass
+import com.reinanbr.uburoot.hwbridge.BridgeService
 
 /**
  * Hardware access: every class with its route (direct, bridge, takeover), who may
@@ -77,6 +82,27 @@ class HardwareActivity : ComponentActivity() {
     private fun Screen(state: HardwareState) {
         var askWifi by rememberSaveable { mutableStateOf(false) }
         var askRevert by rememberSaveable { mutableStateOf(false) }
+        var askGadget by rememberSaveable { mutableStateOf("") }
+        var pendingBridge by rememberSaveable { mutableStateOf("") }
+        var bridgeNote by rememberSaveable { mutableStateOf("") }
+        val active by BridgeService.active.collectAsState()
+        val bridgeError by BridgeService.error.collectAsState()
+        val askPerms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            val name = pendingBridge
+            pendingBridge = ""
+            // The microphone is optional (playback works without it); camera and GPS are not.
+            val need = when (name) {
+                "camera" -> Manifest.permission.CAMERA
+                "location" -> Manifest.permission.ACCESS_FINE_LOCATION
+                else -> null
+            }
+            if (need != null && checkSelfPermission(need) != PackageManager.PERMISSION_GRANTED) {
+                bridgeNote = getString(R.string.hw_bridge_denied, name)
+            } else if (name.isNotEmpty()) {
+                bridgeNote = ""
+                vm.bridge(name, true)
+            }
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -121,6 +147,54 @@ class HardwareActivity : ComponentActivity() {
             } else {
                 OutlinedButton(onClick = { askWifi = true }, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.hw_wifi_take))
+                }
+            }
+
+            HorizontalDivider()
+            Text(stringResource(R.string.hw_bridges), style = MaterialTheme.typography.titleMedium)
+            Hint(stringResource(R.string.hw_bridges_hint))
+            for ((name, label) in BRIDGES) {
+                val on = name in active
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = on,
+                            enabled = enabled || on,
+                            role = Role.Switch,
+                            onClick = {
+                                if (on) {
+                                    vm.bridge(name, false)
+                                } else {
+                                    pendingBridge = name
+                                    askPerms.launch(bridgePermissions(name))
+                                }
+                            },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(label), modifier = Modifier.weight(1f))
+                    Switch(checked = on, onCheckedChange = null, enabled = enabled || on)
+                }
+            }
+            val note = bridgeNote.ifEmpty { bridgeError }
+            if (note.isNotEmpty()) Text(note, color = MaterialTheme.colorScheme.error)
+
+            HorizontalDivider()
+            Text(stringResource(R.string.hw_gadget), style = MaterialTheme.typography.titleMedium)
+            Hint(stringResource(R.string.hw_gadget_hint))
+            if (s.gadget.isNotEmpty()) Text(stringResource(R.string.hw_gadget_active, s.gadget.joinToString(", ")))
+            for ((func, label) in GADGET) {
+                val has = s.gadget.any { it.startsWith(func) }
+                OutlinedButton(
+                    onClick = { askGadget = func },
+                    enabled = enabled && !has,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(label)) }
+            }
+            if (s.gadget.isNotEmpty()) {
+                Button(onClick = vm::gadgetOff, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.hw_gadget_off))
                 }
             }
 
@@ -180,6 +254,15 @@ class HardwareActivity : ComponentActivity() {
                 onDismiss = { askWifi = false },
             ) { vm.wifi(true) }
         }
+        if (askGadget.isNotEmpty()) {
+            val func = askGadget
+            Confirm(
+                title = R.string.hw_gadget_confirm_title,
+                body = R.string.hw_gadget_confirm_body,
+                accept = android.R.string.ok,
+                onDismiss = { askGadget = "" },
+            ) { vm.gadget(func) }
+        }
         if (askRevert) {
             Confirm(
                 title = R.string.kernel_revert,
@@ -233,9 +316,32 @@ class HardwareActivity : ComponentActivity() {
         )
     }
 
+    private fun bridgePermissions(name: String): Array<String> = when (name) {
+        "audio" -> arrayOf(Manifest.permission.RECORD_AUDIO)
+        "camera" -> arrayOf(Manifest.permission.CAMERA)
+        "location" -> arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        else -> emptyArray()
+    }
+
     @Composable
     private fun Hint(text: String) = Text(text, style = MaterialTheme.typography.bodySmall)
 
     @Composable
     private fun Mono(text: String) = Text(text, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
+
+    private companion object {
+        val BRIDGES = listOf(
+            "audio" to R.string.hw_bridge_audio,
+            "camera" to R.string.hw_bridge_camera,
+            "sensors" to R.string.hw_bridge_sensors,
+            "location" to R.string.hw_bridge_location,
+        )
+
+        // Status names: ncm, acm, hidkbd + hidmouse, storage.
+        val GADGET = listOf(
+            "ncm" to R.string.hw_gadget_ncm,
+            "acm" to R.string.hw_gadget_acm,
+            "hid" to R.string.hw_gadget_hid,
+        )
+    }
 }

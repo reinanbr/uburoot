@@ -18,6 +18,7 @@ import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.reinanbr.uburoot.R
+import com.reinanbr.uburoot.hwbridge.BridgeService
 import com.reinanbr.uburoot.root.RootShell
 import com.reinanbr.uburoot.root.UbuPaths
 import kotlinx.coroutines.MainScope
@@ -92,6 +93,7 @@ class SessionService : Service() {
         if (stopping) return
         stopping = true
         SessionManager.closeAll()
+        BridgeService.stopAll(this)
         // umount.sh --kill can take a while (tens of seconds on slow devices).
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
         scope.launch {

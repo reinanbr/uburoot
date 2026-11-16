@@ -4,6 +4,7 @@ package com.reinanbr.uburoot.settings
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.reinanbr.uburoot.hwbridge.BridgeService
 import com.reinanbr.uburoot.install.ConfigStore
 import com.reinanbr.uburoot.install.UbuConfig
 import com.reinanbr.uburoot.root.RootShell
@@ -100,6 +101,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /** Closes every session, releases every mount (killing what is left) and mounts again. */
     fun repairMounts() = work {
         SessionManager.closeAll()
+        BridgeService.stopAll(getApplication())
         val code = RootShell.stream(
             "${UbuPaths.script("umount.sh")} --kill && ${UbuPaths.script("mount.sh")}",
             ::log,
@@ -113,6 +115,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun reset() = work {
         SessionManager.closeAll()
+        BridgeService.stopAll(getApplication())
         when (val code = RootShell.stream("${UbuPaths.script("reset.sh")} --yes", ::log)) {
             0 -> {
                 _state.update { it.copy(resetDone = true) }

@@ -33,6 +33,10 @@ data class HardwareStatus(
     val battery: Triple<Int?, String, Int?>?,
     val wakeLock: Boolean,
     val changes: Int,
+    /** Bridges whose token file is published in Ubuntu: `bridge=NAME|on`. */
+    val bridges: Set<String> = emptySet(),
+    /** UbuRoot's functions in the USB gadget (`gadget=ncm,acm|UDC`); empty = none. */
+    val gadget: List<String> = emptyList(),
 ) {
     val wifiTaken get() = classes.any { it.name == "wifi" && it.state == "taken" }
 
@@ -44,6 +48,8 @@ data class HardwareStatus(
             var battery: Triple<Int?, String, Int?>? = null
             var wake = false
             var changes = 0
+            val bridges = mutableSetOf<String>()
+            var gadget = emptyList<String>()
             for (line in lines) {
                 val i = line.indexOf('=')
                 if (i <= 0) continue
@@ -88,9 +94,13 @@ data class HardwareStatus(
                     "wakelock" -> wake = value == "on"
 
                     "changes" -> changes = value.toIntOrNull() ?: 0
+
+                    "bridge" -> if (value.endsWith("|on")) bridges += value.substringBefore('|')
+
+                    "gadget" -> gadget = value.substringBefore('|').split(',').filter { it.isNotBlank() }
                 }
             }
-            return HardwareStatus(access, classes, cpus, battery, wake, changes)
+            return HardwareStatus(access, classes, cpus, battery, wake, changes, bridges, gadget)
         }
     }
 }

@@ -4,6 +4,7 @@ package com.reinanbr.uburoot.hardware
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.reinanbr.uburoot.hwbridge.BridgeService
 import com.reinanbr.uburoot.install.ConfigStore
 import com.reinanbr.uburoot.root.RootShell
 import com.reinanbr.uburoot.root.Sh
@@ -55,6 +56,14 @@ class HardwareViewModel(app: Application) : AndroidViewModel(app) {
     fun wifi(take: Boolean) = act("$hw -y ${if (take) "takeover" else "release"} wifi")
 
     fun wakeLock(on: Boolean) = act("$hw -y wakelock ${if (on) "on" else "off"}")
+
+    /** Adds ncm, acm or hid to the phone's USB gadget (next to adb; recorded). */
+    fun gadget(func: String) = act("$hw -y gadget on ${Sh.quote(func)}")
+
+    fun gadgetOff() = act("$hw gadget off")
+
+    /** Bridges run in BridgeService; the screen asked for the permission already. */
+    fun bridge(name: String, on: Boolean) = BridgeService.set(getApplication(), name, on)
 
     /** The same revert as Stop all: every recorded kernel and hardware change. */
     fun revert() = act("${UbuPaths.script("kernel.sh")} -y revert")

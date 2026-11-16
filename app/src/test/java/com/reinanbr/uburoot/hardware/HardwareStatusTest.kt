@@ -18,6 +18,9 @@ class HardwareStatusTest {
         "battery=85|Charging|312",
         "wakelock=on",
         "rules=running",
+        "bridge=audio|on",
+        "bridge=camera|off",
+        "gadget=ncm,hidkbd|a600000.dwc3",
         "changes=3",
     )
 
@@ -35,6 +38,9 @@ class HardwareStatusTest {
         assertEquals(Triple(85, "Charging", 312), s.battery)
         assertTrue(s.wakeLock)
         assertEquals(3, s.changes)
+        assertEquals(setOf("audio"), s.bridges)
+        assertEquals(listOf("ncm", "hidkbd"), s.gadget)
+        assertTrue(HardwareStatus.parse(listOf("gadget=|none")).gadget.isEmpty())
     }
 
     @Test

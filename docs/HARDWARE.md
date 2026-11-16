@@ -31,7 +31,7 @@ No option changes these:
 | Route | Meaning |
 |-------|---------|
 | direct | the kernel interface is free: Ubuntu uses the device node or sysfs file itself |
-| bridge | Android owns the device through a HAL; Ubuntu gets it through the app (Phase 3b) |
+| bridge | Android owns the device through a HAL; Ubuntu gets it through the app (see Bridges) |
 | takeover | Android is asked to stop using it, then Ubuntu uses the kernel interface |
 | read | report only |
 | none | no kernel interface on this phone |
@@ -46,15 +46,16 @@ which processes hold them open.
 | gpu | direct | `aid_graphics` 1003 | `/dev/kgsl-3d0`, `/dev/dri/*`, `fb*`. A GPU driver for Ubuntu (Mesa freedreno on Adreno) is Phase 4 |
 | input | direct | `aid_input` 1004 | `/dev/input/event*`. Reading them sees every touch and key, Android's too |
 | uinput | direct | `aid_uhid` 3011 | `/dev/uinput`, `/dev/uhid`: virtual keyboards/mice |
-| audio | bridge | `aid_audio` 1005 | `/dev/snd/*` is held by Android's audio HAL |
-| camera | bridge | `aid_camera` 1006 | `video*`/`media*`/`v4l-subdev*` are the ISP's, held by the camera HAL |
+| audio | bridge | `aid_audio` 1005 | `/dev/snd/*` is held by Android's audio HAL: `uburoot-audio`. USB audio cards work directly (ALSA) |
+| camera | bridge | `aid_camera` 1006 | `video*`/`media*`/`v4l-subdev*` are the ISP's, held by the camera HAL: `uburoot-camera` |
 | usb | direct | `aid_usb` 1018 | `/dev/bus/usb/*` (OTG host). ueventd gives them `root:usb 0660` |
 | serial | direct | `dialout` 20 | `ttyACM*`, `ttyUSB*`: ueventd has no rule (root 0600), so a grant adds a **permission rule** |
 | hidraw | direct | `plugdev` 46 | `hidraw*`: same, a permission rule |
 | wifi | takeover | — | see below |
 | bluetooth | none / bridge | — | see below |
 | nfc | none | `aid_nfc` 1027 | see below |
-| sensors | bridge | — | Android's sensor HAL (Phase 3b) |
+| sensors | bridge | `uburoot-sensors` | Android's sensor HAL: `uburoot-sensors` |
+| location | bridge | `uburoot-location` | Android's GNSS HAL: `uburoot-gps` |
 | leds | direct | — | `uburoot-hw set /sys/class/leds/NAME/brightness V` (recorded) |
 | cpu | direct | — | `uburoot-hw cpu governor|min|max|online` (recorded) |
 | power, thermal, modem | read | — | battery, thermal zones and trips, modem nodes |
@@ -102,6 +103,83 @@ then started its own again and Wi-Fi came back.
 - **NFC:** `/dev/sec-nfc` (Samsung driver) exists, but `CONFIG_NFC` is off: there is no
   kernel NFC subsystem for `neard`/libnfc. Report only.
 
+## Bridges
+
+Android keeps the speaker, microphone, cameras, sensors and GNSS receiver; the app
+serves them to Ubuntu. Turn a bridge on in the Hardware screen (*Bridges*): the app asks
+for the Android permission it needs (microphone, camera, location) and runs a foreground
+service with a notification while any bridge is on. *Stop all*, *Repair mounts* and the
+notification's *Turn off* end them.
+
+| Command | What |
+|---------|------|
+| `uburoot-audio play [FILE]` | raw s16le PCM to the speaker (`UBU_RATE`, default 48000; `UBU_CHANNELS`, default 2) |
+| `uburoot-audio record` | the microphone as raw s16le (mono by default) |
+| `uburoot-audio pulse [--mic]` / `pulse off` | a PulseAudio sink `android` (and source `android_mic`) through `module-pipe-sink`/`-source` |
+| `uburoot-camera list` | camera ids, facing, JPEG sizes |
+| `uburoot-camera snap FILE.jpg [ID] [WxH]` | one photo (1.5 s of frames first, so exposure settles) |
+| `uburoot-camera mjpeg [ID] [WxH]` | JPEG frames to stdout (`ffmpeg -f mjpeg -i -`) |
+| `uburoot-sensors list` / `read KEY` / `stream KEY [HZ]` | `TIME_NS VALUE...` per reading; at most 200 Hz |
+| `uburoot-gps nmea` / `fix` | NMEA sentences (for gpsd), or one position |
+
+Examples:
+
+```sh
+ffmpeg -i song.mp3 -f s16le -ar 48000 -ac 2 - | uburoot-audio play
+uburoot-audio record | ffmpeg -f s16le -ar 48000 -ac 1 -i - mic.wav
+uburoot-camera mjpeg 0 640x480 | ffmpeg -f mjpeg -i - -c:v libx264 video.mp4
+socat PTY,link=/tmp/gps0,raw EXEC:'uburoot-gps nmea' & gpsd -N /tmp/gps0
+```
+
+How it works: each bridge is an abstract Unix socket with a random name, opened by the
+app. `hardware.sh bridge publish` writes its name and a random token to
+`/run/uburoot-bridge/NAME` inside Ubuntu, `root:GROUP 0640` (GROUP = the class's:
+`aid_audio`, `aid_camera`, `uburoot-sensors`, `uburoot-location`). So root and the users
+granted the class (`sudo uburoot-hw grant camera ana`, new session) can read the token;
+others are told to ask for the grant. The app also checks the caller's uid: root or a
+chroot user (8000–9996), never another Android app. The client
+(`/usr/local/lib/uburoot/bridge-client`) is perl-base, which Ubuntu Base has. Abstract
+sockets live in the network namespace that Android and the chroot share. A Unix socket
+avoids localhost TCP: netd drops uids ≥ 10000 (the app's) in restricted networking mode.
+
+No virtual V4L2 camera: `v4l2loopback` would be an unsigned module, and the S9 has
+`MODULE_SIG_FORCE=y`. MJPEG on stdout covers ffmpeg, OpenCV (`cv2.VideoCapture` on a
+pipe through ffmpeg) and streaming.
+
+## USB gadget
+
+`uburoot-hw gadget on ncm|acm|hid|storage IMAGE [rw]`, `gadget off`, `gadget status`
+(also on the Hardware screen, except storage). UbuRoot links functions into the config of
+the gadget Android has bound, next to adb's `f1`, as `uburoot.ncm`, `uburoot.acm`,
+`uburoot.hidkbd` + `uburoot.hidmouse` and `uburoot.storage`. It unbinds and rebinds the
+UDC around each change (recorded as `takeover gadget GADGET:UDC`). Off, *Revert
+changes* and *Stop all* remove the links, eject the image and bind again.
+
+| Function | Phone side | Computer side |
+|----------|-----------|---------------|
+| ncm | `usb0` (`ip addr add 10.42.0.1/24 dev usb0; ip link set usb0 up`) | a CDC NCM Ethernet interface |
+| acm | `/dev/ttyGS<port_num>` | `/dev/ttyACM*` |
+| hid | `/dev/hidg0` keyboard (boot protocol, 8-byte reports), `/dev/hidg1` mouse (4 bytes) | a keyboard and a mouse |
+| storage | an image file (read-only unless `rw`); never a block device | a USB disk |
+
+**Never removes a function instance.** On the S9 (2026-11-16) the first version created
+its own `ncm.uburoot` instance and removed it with `rmdir` at the end: the kernel
+panicked (pstore `dmesg-ramoops-0`: `Unable to handle kernel NULL pointer dereference`,
+`PC is at ncm_free_inst+0x1c/0x70`, call trace `ncm_free_inst ← ncm_attr_release ←
+configfs_rmdir`, task `rmdir`; `sys.boot.reason=kernel_panic`). At the same moment init
+was re-running its `sys.usb.config=adb` action (the UDC unbind restarts adbd's
+FunctionFS), which removes `f1..f9`. So UbuRoot now uses Android's own instances
+(`ncm.0`, `acm.0`, `mass_storage.0`: the S9's g1 has them) and only adds and removes
+links. HID has no Android instance: `hid.uburootkbd`/`hid.uburootmouse` are created once
+and stay, unlinked and inert, until a reboot. If `mass_storage.0` already exports a file
+for Android, `storage` refuses. After the change: two full on/off cycles of
+ncm + acm + hid + storage (an 8 MB image) with no panic; the computer saw CDC NCM, CDC
+ACM, two HID interfaces, the read-only disk and ADB at once, and only ADB afterwards. adb
+over USB stayed connected throughout.
+
+The HID gadget is a keyboard and mouse for your own computer; UbuRoot ships no payloads
+or scripts that type on their own.
+
 ## Other S9 findings (2026-11-16)
 
 - GPU/display: `/dev/kgsl-3d0` `system:system 0666`, `/dev/dri/*` `root:graphics 0666`,
@@ -130,3 +208,4 @@ Besides `sysctl`, `selinux` and `module` (see `KERNEL.md`):
 | `node PATH UID:GID:MODE` | `chown` + `chmod` back (skipped if the node is gone) |
 | `wakelock NAME -` | writes NAME to `/sys/power/wake_unlock` |
 | `takeover wifi W:S` | stops Ubuntu's Wi-Fi daemons, restores scanning and Wi-Fi |
+| `takeover gadget GADGET:UDC` | unbinds, removes the `uburoot.*` links (ejects the image), binds the UDC again |

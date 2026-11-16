@@ -75,9 +75,12 @@ Available now:
   the state and the kernel logs. See [docs/KERNEL.md](docs/KERNEL.md).
 - **Hardware access** (opt-in, Settings → *Hardware access*): `uburoot-hw` shows every
   hardware class and who uses it, gives Ubuntu users the device groups (GPU, input, USB,
-  serial...), takes Wi-Fi over from Android, sets CPU limits, LEDs and a wake lock.
-  Changes are recorded and undone by *Stop all*; thermal, charger and battery settings
-  stay read-only. Menu → *Hardware*. See [docs/HARDWARE.md](docs/HARDWARE.md).
+  serial...), takes Wi-Fi over from Android, sets CPU limits, LEDs and a wake lock, and
+  adds USB gadget functions (network, serial, keyboard/mouse, disk image) next to adb.
+  Bridges bring Android's speaker, microphone, cameras, sensors and GPS into Ubuntu
+  (`uburoot-audio`, `uburoot-camera`, `uburoot-sensors`, `uburoot-gps`). Changes are
+  recorded and undone by *Stop all*; thermal, charger and battery settings stay
+  read-only. Menu → *Hardware*. See [docs/HARDWARE.md](docs/HARDWARE.md).
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).
 - **Android integration**: `/sdcard`, `/data` and the system partitions are available
@@ -281,7 +284,8 @@ and the processes with Android:
   all*; changes made by hand last until the next reboot.
 - With **Hardware access** on, root in Ubuntu can hand the phone's devices to Ubuntu
   users and turn Android's Wi-Fi off. Changes made with `uburoot-hw` are undone by *Stop
-  all*.
+  all*. A bridge you turn on lets root, and the users you granted that class, use the
+  microphone, cameras or location while it is on (the app shows a notification).
 
 ## How it works
 

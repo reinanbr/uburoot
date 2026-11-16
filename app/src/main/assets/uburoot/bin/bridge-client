@@ -1,0 +1,76 @@
+#!/usr/bin/perl
+# SPDX-License-Identifier: GPL-3.0-or-later
+# bridge-client NAME COMMAND [ARGS...]: one request to an Android bridge served by the
+# UbuRoot app (Hardware screen > Bridges). Installed inside Ubuntu as
+# /usr/local/lib/uburoot/bridge-client; used by uburoot-audio, -camera, -sensors, -gps.
+#
+# /run/uburoot-bridge/NAME holds "socket=" (the app's abstract Unix socket, renamed on
+# every start) and "token=". Only root and the class's group can read it (uburoot-hw
+# grant CLASS USER). The request is one line, "TOKEN COMMAND ARGS"; the app answers
+# "OK [info]" or "ERR message", then streams. "play" sends stdin to the app; every
+# other command copies the app's stream to stdout. perl-base only: Ubuntu Base has it.
+use strict;
+use warnings;
+use Socket qw(AF_UNIX SOCK_STREAM pack_sockaddr_un);
+
+my ($name, @cmd) = @ARGV;
+die "usage: bridge-client NAME COMMAND [ARGS...]\n"
+    unless defined $name && $name =~ /^[a-z]+$/ && @cmd;
+my $file = "/run/uburoot-bridge/$name";
+open(my $fh, '<', $file)
+    or die "the $name bridge is off, or you may not use it ($file: $!).\n"
+    . "Turn it on in the app (Hardware > Bridges); for a user: sudo uburoot-hw grant CLASS USER\n";
+my %kv;
+while (<$fh>) { $kv{$1} = $2 if /^(\w+)=(\S+)$/; }
+close $fh;
+die "$file is incomplete\n" unless $kv{socket} && $kv{token};
+
+socket(my $s, AF_UNIX, SOCK_STREAM, 0) or die "socket: $!\n";
+connect($s, pack_sockaddr_un("\0$kv{socket}"))
+    or die "the app is not serving the $name bridge ($!): turn it on again in the app\n";
+binmode $s;
+binmode STDIN;
+binmode STDOUT;
+
+sub put {
+    my ($fd, $buf) = @_;
+    my $off = 0;
+    while ($off < length $buf) {
+        my $w = syswrite($fd, $buf, length($buf) - $off, $off);
+        return 0 unless defined $w;
+        $off += $w;
+    }
+    return 1;
+}
+
+put($s, join(' ', $kv{token}, @cmd) . "\n") or die "the app closed the connection\n";
+my $status = '';
+while (1) {
+    my $n = sysread($s, my $c, 1);
+    last unless $n;
+    last if $c eq "\n";
+    $status .= $c;
+}
+if ($status !~ /^OK/) {
+    $status =~ s/^ERR ?//;
+    die(($status eq '' ? 'no answer from the app' : $status) . "\n");
+}
+print STDERR "$1\n" if $status =~ /^OK (.+)/;
+
+if ($cmd[0] eq 'play') {
+    while (1) {
+        my $n = sysread(STDIN, my $buf, 65536);
+        die "read: $!\n" unless defined $n;
+        last if $n == 0;
+        put($s, $buf) or die "the app stopped playing\n";
+    }
+    shutdown($s, 1);
+    sysread($s, my $done, 1);    # the app closes once the sound has played
+} else {
+    while (1) {
+        my $n = sysread($s, my $buf, 65536);
+        last unless $n;
+        put(\*STDOUT, $buf) or last;
+    }
+}
+exit 0;

@@ -232,9 +232,10 @@ check "doctor (plain) names the user" grep -qw tester /tmp/doctor.txt
 check "redacted: no user name" sh -c "! grep -qw tester /tmp/doctor-r.txt"
 check "redacted: no kernel hostname" sh -c "! grep -qwF \"\$(cat /proc/sys/kernel/hostname)\" /tmp/doctor-r.txt"
 check "redacted: marked as such" grep -q '^redacted: *yes' /tmp/doctor-r.txt
-# Same keys in the same order (values differ: that's the point).
-cut -c1-25 /tmp/doctor.txt >/tmp/doctor.keys
-cut -c1-25 /tmp/doctor-r.txt >/tmp/doctor-r.keys
+# Same keys in the same order (values differ: that's the point). Not the summary: a
+# network check (DNS from the container) can fail in one run and not the other.
+grep -v '^summary:' /tmp/doctor.txt | cut -c1-25 >/tmp/doctor.keys
+grep -v '^summary:' /tmp/doctor-r.txt | cut -c1-25 >/tmp/doctor-r.keys
 if cmp -s /tmp/doctor.keys /tmp/doctor-r.keys; then ok "redacted: same report shape"; else
     bad "redacted: same report shape"
     diff /tmp/doctor.keys /tmp/doctor-r.keys | head -20
@@ -633,6 +634,10 @@ h_badgrant() { ! hin grant wifi tester 2>/dev/null && ! hin grant usb nosuchuser
 h_gov() { hin cpu governor policy0 performance >/dev/null && [ "$(cat $P/scaling_governor)" = performance ] && grep -qx "file /tmp/hw/sys/devices/system/cpu/cpufreq/policy0/scaling_governor schedutil" $CH; }
 h_badfreq() { ! hin cpu max policy0 2500000 2>/dev/null && [ "$(cat $P/scaling_max_freq)" = 1800000 ]; }
 h_freq() { hin cpu max policy0 1000000 >/dev/null && [ "$(cat $P/scaling_max_freq)" = 1000000 ]; }
+h_boost() { # a hardware limit missing from the table (a boost frequency)
+    echo 2000000 >$P/cpuinfo_max_freq && hin cpu max policy0 2000000 >/dev/null && [ "$(cat $P/scaling_max_freq)" = 2000000 ] &&
+        hin cpu max policy0 1000000 >/dev/null && echo 1800000 >$P/cpuinfo_max_freq
+}
 h_cpu0() { ! hin cpu online 0 0 2>/dev/null; }
 h_offline() { hin cpu online 1 0 >/dev/null && [ "$(cat $H/sys/devices/system/cpu/cpu1/online)" = 0 ]; }
 h_wake() { hin wakelock on >/dev/null && grep -qx uburoot_hw $H/power/wake_lock && grep -qx 'wakelock uburoot_hw -' $CH; }
@@ -660,6 +665,7 @@ check "grant refuses a class without a group and an unknown user" h_badgrant
 check "cpu governor recorded" h_gov
 check "cpu max outside the frequency table refused" h_badfreq
 check "cpu max from the table" h_freq
+check "cpu max: cpuinfo_max_freq accepted even outside the table" h_boost
 check "cpu0 can't go offline" h_cpu0
 check "cpu1 offline recorded" h_offline
 check "wake lock recorded" h_wake

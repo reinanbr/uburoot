@@ -101,7 +101,7 @@ sysctl_set() { # NAME VALUE
         say "$_k = $2 (unchanged)"
         return 0
     fi
-    printf '%s\n' "$2" >"$_f" 2>/dev/null || die "the kernel refused $_k = $2"
+    wr "$2" "$_f" 2>/dev/null || die "the kernel refused $_k = $2"
     _new=$(cat "$_f")
     if _rec=$(rec_get sysctl "$_k"); then
         [ "$_new" = "$_rec" ] && rec_del sysctl "$_k"
@@ -126,7 +126,7 @@ selinux_set() { # 0|1
     if [ "$1" = 0 ]; then
         confirm "Switch SELinux to PERMISSIVE for the whole phone? Every app loses SELinux protection until Stop all, Revert changes or a reboot."
     fi
-    printf '%s' "$1" >"$ENFORCE" 2>/dev/null || die "the kernel refused the SELinux switch"
+    wr "$1" "$ENFORCE" 2>/dev/null || die "the kernel refused the SELinux switch"
     [ "$(cat "$ENFORCE")" = "$1" ] || die "SELinux mode did not change"
     if _rec=$(rec_get selinux -); then
         [ "$1" = "$_rec" ] && rec_del selinux -

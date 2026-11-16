@@ -432,7 +432,7 @@ cpu_show() {
 set_file() { # PATH VALUE (recorded)
     _o=$(cat "$1" 2>/dev/null) || die "cannot read $1"
     [ "$_o" = "$2" ] && { say "${1#"$HW"} = $2 (unchanged)"; return 0; }
-    printf '%s\n' "$2" >"$1" 2>/dev/null || die "the kernel refused ${1#"$HW"} = $2"
+    wr "$2" "$1" 2>/dev/null || die "the kernel refused ${1#"$HW"} = $2"
     _n=$(cat "$1" 2>/dev/null)
     if _r=$(rec_get file "$1"); then
         [ "$_n" = "$_r" ] && rec_del file "$1"
@@ -466,8 +466,13 @@ cpu_cmd() {
             [ $# = 3 ] || die "usage: uburoot-hw cpu $1 POLICY|all FREQ_KHZ"
             lock
             for _p in $(policy_dirs "$2"); do
-                bb grep -qw -- "$3" "$_p/scaling_available_frequencies" ||
+                # The table can leave out the boost frequency (S9 policy4: cpuinfo_max_freq
+                # 2803200, the table ends at 2649600), so the hardware limits count too.
+                if ! bb grep -qw -- "$3" "$_p/scaling_available_frequencies" &&
+                    [ "$3" != "$(cat "$_p/cpuinfo_max_freq" 2>/dev/null)" ] &&
+                    [ "$3" != "$(cat "$_p/cpuinfo_min_freq" 2>/dev/null)" ]; then
                     die "${_p##*/}: $3 is not one of its frequencies ($(cat "$_p/scaling_available_frequencies"))"
+                fi
                 set_file "$_p/scaling_$1_freq" "$3"
             done
             ;;
@@ -488,12 +493,12 @@ wakelock() {
     lock
     case "${1:-}" in
         on)
-            printf 'uburoot_hw\n' >"$POWER/wake_lock" 2>/dev/null || die "cannot take a wake lock"
+            wr uburoot_hw "$POWER/wake_lock" 2>/dev/null || die "cannot take a wake lock"
             rec_add wakelock uburoot_hw -
             say "wake lock held: the phone won't suspend (wakelock off, Stop all or a reboot releases it)"
             ;;
         off)
-            printf 'uburoot_hw\n' >"$POWER/wake_unlock" 2>/dev/null
+            wr uburoot_hw "$POWER/wake_unlock" 2>/dev/null
             rec_del wakelock uburoot_hw
             say "wake lock released"
             ;;

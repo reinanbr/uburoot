@@ -77,6 +77,14 @@ rec_del() { # TYPE NAME
 }
 rec_count() { bb awk 'NF' "$CHANGES" 2>/dev/null | bb wc -l | tr -d ' '; }
 
+# A value into a sysfs or /proc file in ONE write(): sysfs stores each write() as a
+# separate value. mksh has no builtin printf, and toybox's printf writes "2803200"
+# and "\n" separately (strace on the S9), so the "\n" alone fails with EINVAL.
+# The shell's builtin echo (mksh, dash) writes the line at once.
+wr() { # VALUE FILE
+    echo "$1" >"$2"
+}
+
 loaded() { bb awk '{ print $1 }' "$PROCMOD" 2>/dev/null; }
 
 # An Android tool (cmd, settings, svc...): directly on the Android side, through
@@ -94,14 +102,22 @@ acmd() {
 # Processes started from Ubuntu's own binaries (never Android's /vendor ones of the
 # same name): their executable ends in /usr/sbin/NAME (or /usr/bin/NAME).
 kill_ubuntu_exe() { # NAME...
-    for _p in /proc/[0-9]*; do
-        _e=$(readlink "$_p/exe" 2>/dev/null) || continue
-        for _x in "$@"; do
-            case "$_e" in
-                */usr/sbin/"$_x" | */usr/bin/"$_x") kill "${_p#/proc/}" 2>/dev/null ;;
-            esac
-        done
-    done
+    # One ls + awk, not a readlink per process: from the app's cgroup a fork per
+    # process took ~20 s for a Wi-Fi release on the S9 (see ubu_chroot_pids).
+    # shellcheck disable=SC2012 # symlink targets of /proc/*/exe: no odd file names here
+    _pids=$(ls -l /proc/[0-9]*/exe 2>/dev/null | bb awk -v names="$*" '
+        BEGIN { n = split(names, w, " ") }
+        $(NF - 1) == "->" {
+            for (i = 1; i <= n; i++) {
+                if ($NF ~ ("/usr/s?bin/" w[i] "$")) {
+                    split($(NF - 2), a, "/")
+                    print a[3]
+                }
+            }
+        }')
+    # shellcheck disable=SC2086 # a list of pids
+    [ -z "$_pids" ] || kill $_pids 2>/dev/null
+    return 0
 }
 
 # Wi-Fi given back to Android. STATE is "WIFI:SCAN" as it was before the takeover.
@@ -124,10 +140,10 @@ revert_one() { # TYPE NAME VALUE -> 0 if undone
             ;;
         sysctl)
             _f="$SYSCTL/$(printf '%s' "$2" | tr '.' '/')"
-            if printf '%s\n' "$3" >"$_f" 2>/dev/null; then
+            if wr "$3" "$_f" 2>/dev/null; then
                 :
             elif [ "$2" = kernel.kptr_restrict ] && [ "$3" -gt 2 ] 2>/dev/null &&
-                printf '2\n' >"$_f" 2>/dev/null; then
+                wr 2 "$_f" 2>/dev/null; then
                 # Some kernels boot with a value above 2 (the S9: 4) that a write
                 # can't set again (0-2 only); the kernel treats >= 2 alike: hidden.
                 say "kernel.kptr_restrict: $3 can't be written back; set 2 (same effect)"
@@ -137,12 +153,12 @@ revert_one() { # TYPE NAME VALUE -> 0 if undone
             fi
             ;;
         selinux)
-            printf '%s' "$3" >"$ENFORCE" 2>/dev/null || { say "could not restore SELinux" >&2; return 1; }
+            wr "$3" "$ENFORCE" 2>/dev/null || { say "could not restore SELinux" >&2; return 1; }
             ;;
         file)
             # Gone (an unplugged device, an offline CPU's files) = nothing to restore.
             [ -e "$2" ] || return 0
-            printf '%s\n' "$3" >"$2" 2>/dev/null || { say "could not restore $2 = $3" >&2; return 1; }
+            wr "$3" "$2" 2>/dev/null || { say "could not restore $2 = $3" >&2; return 1; }
             ;;
         node)
             [ -e "$2" ] || return 0
@@ -152,7 +168,7 @@ revert_one() { # TYPE NAME VALUE -> 0 if undone
             fi
             ;;
         wakelock)
-            printf '%s\n' "$2" >"$POWER/wake_unlock" 2>/dev/null
+            wr "$2" "$POWER/wake_unlock" 2>/dev/null
             ;;
         takeover)
             case "$2" in

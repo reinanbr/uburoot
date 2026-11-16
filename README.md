@@ -73,6 +73,11 @@ Available now:
   settings, modules, SELinux and out-of-tree builds. Every change made with them is
   recorded and undone by *Stop all*, *Revert changes* or a reboot. Menu → *Kernel* shows
   the state and the kernel logs. See [docs/KERNEL.md](docs/KERNEL.md).
+- **Hardware access** (opt-in, Settings → *Hardware access*): `uburoot-hw` shows every
+  hardware class and who uses it, gives Ubuntu users the device groups (GPU, input, USB,
+  serial...), takes Wi-Fi over from Android, sets CPU limits, LEDs and a wake lock.
+  Changes are recorded and undone by *Stop all*; thermal, charger and battery settings
+  stay read-only. Menu → *Hardware*. See [docs/HARDWARE.md](docs/HARDWARE.md).
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).
 - **Android integration**: `/sdcard`, `/data` and the system partitions are available
@@ -274,6 +279,9 @@ and the processes with Android:
 - With **Kernel access** on, root in Ubuntu also controls the kernel: settings, modules,
   SELinux, USB gadget, tracing. Changes made with `uburoot-kernel` are undone by *Stop
   all*; changes made by hand last until the next reboot.
+- With **Hardware access** on, root in Ubuntu can hand the phone's devices to Ubuntu
+  users and turn Android's Wi-Fi off. Changes made with `uburoot-hw` are undone by *Stop
+  all*.
 
 ## How it works
 

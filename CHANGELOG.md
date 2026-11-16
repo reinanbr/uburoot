@@ -24,6 +24,22 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   report.
 - `simpleperf` wrapper; `kmod` installed by setup.
 - `docs/KERNEL.md`.
+- **Hardware access** (opt-in, Settings → Hardware access, with a warning; no new
+  mounts). `uburoot-hw` lists each hardware class (GPU, input, uinput, audio, camera,
+  USB, serial, hidraw, Wi-Fi, Bluetooth, NFC, sensors, LEDs, CPU, power, thermal, buses,
+  modem) with its route (direct, bridge, takeover, read), its nodes and who holds them.
+- `uburoot-hw grant|revoke CLASS USER`: device groups (`aid_graphics`, `aid_input`,
+  `aid_usb`...), and for serial and hidraw devices a permission rule that a watcher
+  also applies to devices plugged in later.
+- Wi-Fi takeover: Android's Wi-Fi and Wi-Fi scanning are turned off so Ubuntu can use
+  `wlan0` (`wpa_supplicant`, `hostapd`, scans); *release* or *Stop all* gives it back.
+- CPU governor, frequency limits and online cores, a wake lock, LED brightness and
+  trigger, and bus nodes (i2c, spidev, gpiochip; PMIC/charger nodes refused), all
+  recorded in the same change log as the kernel changes and undone by *Stop all*.
+  Thermal, charger and battery settings stay read-only.
+- Hardware screen (menu → Hardware): classes with grant/revoke for the default user,
+  Wi-Fi takeover, CPU and battery, wake lock, revert.
+- `docs/HARDWARE.md`.
 
 ## [0.3.0] - 2026-11-16
 

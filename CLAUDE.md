@@ -30,7 +30,7 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (released in 0.3.0) |
 | 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
 | 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). CI release APK of `a7e5b2d` on the S9: preflight → terminal; Settings → Kernel access: the warning appears only when turning it on, Cancel keeps 0, Save writes `KERNEL_ACCESS='0'` with the "applies after Repair mounts" notice. on again through the warning + Save + *Repair mounts* (8 kernel binds); Kernel screen: state, developer mode (kptr 2→1, recorded), SELinux switch with its dialog (Permissive), *Revert changes* with its dialog (Enforcing, kptr 2, 0 changes), `dmesg -w` root tab (closing it left no process) |
-| 3 | Full hardware access (`HARDWARE_ACCESS`) | next |
+| 3 | Full hardware access (`HARDWARE_ACCESS`) | 3a (unit 35/35, guard 17/17, Docker 258/258) scripts + app: classes, grants, permission rules + watcher, Wi-Fi takeover, CPU/LED/wake lock/bus nodes, Hardware screen (`docs/HARDWARE.md`); device test of the release APK pending. 3b (audio/camera/sensors bridges, USB gadget) after review |
 
 ## Core principle: system logic lives in shell scripts
 
@@ -74,6 +74,8 @@ no bashisms; `shellcheck -s sh` must pass.
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
 | `boot.sh [--now\|--status]` | run by the module's `service.sh`. Without `BOOT_START=1` it does nothing. Waits for shared storage to decrypt (if `MOUNT_SDCARD`, up to 6 h), runs `mount.sh`, then each executable `/etc/uburoot-boot.d/NAME` (`[A-Za-z0-9_-]+`, no symlinks) through `enter.sh root`. A script still running after `BOOT_SCRIPT_TIMEOUT` (60 s) is left running. `--now` skips the wait and `BOOT_START`; `--status` prints `module=enabled\|disabled\|removing\|pending\|missing` (`/data/adb/modules{,_update}/uburoot`, the same for all three managers) and `boot_start=` |
 | `kernel.sh` | `uburoot-kernel` (Ubuntu side, installed by mount.sh) and the app's backend (Android side, sources common.sh): `status`, `sysctl NAME [V]`, `devmode on\|off`, `selinux [enforcing\|permissive]` (asks; `-y`), `module list\|load\|unload`, `lastlog`, `revert`. Every change goes to `$UBU_STATE/changes` (`sysctl NAME ORIG`, `selinux - ORIG`, `module NAME -`; first change only; `boot_id` stamp; `.lock` dir); revert is newest first. As `uburoot-kmod`, args become `module ...` |
+| `changes.sh` | sourced by `kernel.sh` and `hardware.sh` (inside Ubuntu: `/usr/local/lib/uburoot/changes.sh`): the change log (`lock`/`lock_try`, `rec_*`), `revert_one` for every record type (`sysctl`, `selinux`, `module`, `file`, `node`, `wakelock`, `takeover`), `revert` (newest first), `acmd` (Android tools; through the bionic wrappers inside Ubuntu), `kill_ubuntu_exe` (exe under Ubuntu's `/usr/{s,}bin` only), `ubuntu_access KEY` (`/run/uburoot/access`) |
+| `hardware.sh` | `uburoot-hw` (Ubuntu side, installed by mount.sh with `HARDWARE_ACCESS=1`) and the app's backend: `list`, `info CLASS`, `status` (`access=`, `class=NAME\|ROUTE\|STATE\|NODES\|GROUP\|USERS`, `cpu=`, `battery=`, `wakelock=`, `rules=`, `changes=`), `grant\|revoke CLASS USER`, `takeover\|release wifi`, `cpu governor\|min\|max\|online`, `wakelock on\|off`, `set` (LEDs only), `allow NODE` (bus nodes, PMIC/charger names refused), `apply`/`watch` (permission rules in `$ROOTFS/etc/uburoot/hw-rules`, watcher pid in `run/uburoot/hw-watch.pid`, stopped by `umount.sh`) |
 | `kbuild.sh` | `uburoot-kbuild check\|prepare SRC\|build DIR`: GKI/vendor, expected vermagic from `/proc/config.gz`, signing/modversions verdict; `prepare` sets `LOCALVERSION` so `make kernelrelease` = `uname -r` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=`, `schema=`/`schema_current=`, and the root report: `cap_last_cap=`, `cap_eff=`, `cap_bnd=`, `no_new_privs=`, `seccomp=`, `full_root=yes\|no`, `selinux=` (used by the app) |
 | `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
@@ -88,13 +90,17 @@ Config keys (`uburoot.conf`): `MOUNT_SDCARD`, `ANDROID_INTEGRATION`, `DNS_SERVER
 `APT_MIRROR` (empty = `ports.ubuntu.com/ubuntu-ports/`, or `archive.ubuntu.com` for
 amd64; `http://host/path/` only, checked by `ubu_valid_mirror` and
 `UbuConfig.isValidMirror`; only the release suites, `-security` always comes from
-Canonical), `KERNEL_ACCESS` (0/1, Settings → Kernel access; `mount.sh` section 1b).
+Canonical), `KERNEL_ACCESS` (0/1, Settings → Kernel access; `mount.sh` section 1b),
+`HARDWARE_ACCESS` (0/1, Settings → Hardware access; no mounts: `mount.sh` section 1c
+writes `/run/uburoot/access`, binds the change log and installs `uburoot-hw`).
 
 Test-only env overrides (never set by the app): `UBU_MODULES` (default `/data/adb`), `UBU_BASE`, `ROOTFS`, `UBU_MOUNTS_FILE`,
 `UBU_INOTIFY_FILE` (Docker: the container's `/proc/sys` is the host's),
 `UBU_BB` (`none` = plain commands), `UBU_ALLOW_NONROOT=1`, `UBU_ALLOW_ANY_ARCH=1`,
 `UBU_STATE`; kernel.sh: `UBU_SYSCTL_DIR`, `UBU_SELINUX_ENFORCE`, `UBU_PROC_MODULES`,
-`UBU_BOOT_ID_FILE`, `UBU_INSMOD`, `UBU_RMMOD`, `UBU_MODPROBE`; kbuild.sh: `UBU_KCONFIG`,
+`UBU_BOOT_ID_FILE`, `UBU_INSMOD`, `UBU_RMMOD`, `UBU_MODPROBE`, `UBU_ACCESS_FILE`;
+hardware.sh/changes.sh: `UBU_HW_ROOT` (fake `/dev` + `/sys` prefix), `UBU_POWER_DIR`,
+`UBU_ACMD` (fake `cmd`/`settings`), `UBU_ALLOW_NONROOT`; kbuild.sh: `UBU_KCONFIG`,
 `UBU_KBUILD_STATE`, `UBU_KBUILD_MAKEFLAGS`.
 
 ## CRITICAL SAFETY RULE: never `rm -rf` the rootfs while anything is mounted under it
@@ -187,6 +193,7 @@ dev machine the default `java-25` is a JRE, so build with
 | `bridge/ShareActivity` + `SharedPaths` | *Open in UbuRoot* (SEND `*/*`, text too): maps the shared item to its dir inside Ubuntu (externalstorage/downloads doc ids, MediaStore `RELATIVE_PATH`/`_data`, `file://`), checks it with `bridge.sh cwd`, else `bridge.sh import`; then a session with `UBU_CWD` |
 | `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor (mirror → `setup.sh --sources-only`), *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused), *Diagnostics* (`doctor.sh`, redacted unless the box is ticked; Share/Copy) |
 | `ui/KernelActivity` + `kernel/KernelViewModel`, `KernelStatus` | Kernel screen: everything through `kernel.sh` (with `-y`, the app confirms itself): state, devmode, SELinux switch (strongest warning), recorded changes + *Revert changes*, module list with unload for ours, `dmesg -w` / `lastlog` as root tabs (`SessionManager.create(command=)` → `enter.sh USER CMD`), doctor's Kernel section |
+| `ui/HardwareActivity` + `hardware/HardwareViewModel`, `HardwareStatus` | Hardware screen: `hardware.sh status` parsed; grant/revoke per class for `DEFAULT_USER`, Wi-Fi takeover (confirm dialog)/release, CPU policies + battery, wake lock, *Revert changes* (`kernel.sh -y revert`, the same as Stop all); tap a class for `hardware.sh info` |
 | `ui/AboutActivity` | app version, license, source link, NOTICE / GPL / Apache texts from `assets/licenses/` |
 
 - libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
@@ -415,6 +422,40 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   - Manager module loaders (`ksud insmod`, `apd insmod`, APatch KPM) are documented in
     `docs/KERNEL.md`, not wrapped: they are manager-specific, and KPM needs the
     superkey.
+- **Phase 3 hardware access, evidence (S9, 2026-11-16).** User-facing: `docs/HARDWARE.md`.
+  - AIDs from AOSP 12 `android_filesystem_config.h`: SYSTEM 1000, BLUETOOTH 1002,
+    GRAPHICS 1003, INPUT 1004, AUDIO 1005, CAMERA 1006, WIFI 1010, USB 1018, MEDIA_RW
+    1023, NFC 1027, UHID 3011. Grants create `aid_*` groups with those gids (an
+    existing group with the gid is reused under its name). Ubuntu's own groups:
+    dialout 20, plugdev 46.
+  - Nodes: `/dev/kgsl-3d0` 1000:1000 0666, `/dev/dri/*` root:1003 0666, `fb0`
+    root:1003 0660, `input/event*` root:1004 0660, `/dev/uinput` 3011:3011 0660,
+    `snd/*` 1000:1005 (116), `video*`/`media*`/`v4l-subdev*` 1000:1006, `ttyHS0`
+    1002:1002 (BT UART), `sec-nfc` 1027, `gpiochip*` and `rfkill` root 0600, no
+    `/dev/bus/usb` until OTG. ueventd: `/dev/bus/usb/*` 0660 root usb; no rule for
+    `ttyACM*`/`ttyUSB*`/`hidraw*` (root 0600), hence the permission rules.
+  - Kernel config: no `BT_HCIUART`/`BT_HCIBTUSB`/`BT_HCIVHCI` (no Bluetooth takeover
+    possible), `NFC` off, `MEDIA_USB_SUPPORT` off (no UVC), IIO on without devices;
+    `USB_ACM`, `USB_SERIAL_FTDI_SIO`, `USB_SERIAL_PL2303` (no CP210X/CH341),
+    `SND_USB_AUDIO`, `HIDRAW`, `UHID`, `INPUT_UINPUT`, `I2C_CHARDEV`, `SPI_SPIDEV`,
+    `GPIO_SYSFS` on.
+  - Wi-Fi takeover: `cmd wifi set-scan-always-available disabled` + `cmd wifi
+    set-wifi-enabled disabled` → `wlan0` down, `/vendor/bin/hw/wpa_supplicant` exits,
+    `phy0` stays; Ubuntu's `ip link set wlan0 up` + `iw dev wlan0 scan` worked. `cmd wifi
+    status` first line is `Wifi is enabled|disabled`; scan-always is `settings get
+    global wifi_scan_always_enabled`. Modes IBSS/managed/AP/P2P, no monitor.
+  - cpufreq: policy0 (0-3, 576000-1766400), policy4 (4-7, 825600-2803200), schedutil;
+    `vendor.qti.hardware.perf@2.0-service` and `thermal-engine` may change limits back.
+    `/sys/power/wake_lock` exists. The battery driver exposes `batt_tune_*` voltage
+    knobs: read-only by design (`set` accepts only LED files).
+  - Tools installed into the rootfs run with Ubuntu's `/bin/sh` (`ubu_install_tool`
+    rewrites the `#!/system/bin/sh` line): `/system/bin/sh` exists inside only with
+    `ANDROID_INTEGRATION`.
+  - **Change-log lock and SIGPIPE.** Under dash, `uburoot-kernel status | grep -q ...`
+    left `state/.lock` forever: grep exits early, dash dies of SIGPIPE and runs no EXIT
+    trap (mksh did, so the suite only saw it once the tools ran with Ubuntu's `/bin/sh`).
+    `_lock` now traps PIPE too, writes its pid to `.lock/pid`, and breaks a lock whose
+    owner is gone (`kill -0`; Android and the chroot share the pid namespace).
 - **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
   S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
   the archive signatures anyway). The app copies a SAF file into its cache, then
@@ -529,8 +570,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 32 files, guard 17/17, Docker
-  223/223 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
+- `tests/run-all.sh`: everything below. Now: shellcheck 34 files, guard 17/17, Docker
+  258/258 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
   (0.9.0) must pass too: no `A && B || C`, `head -n 1 file` instead of `cat | head`,
   and `disable=SC2317,SC2329` together.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`

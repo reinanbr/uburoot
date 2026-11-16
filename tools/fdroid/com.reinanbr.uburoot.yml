@@ -36,9 +36,20 @@ Builds:
     gradle:
       - yes
 
+  - versionName: 0.3.0
+    versionCode: 4
+    commit: bc755cf43f1aed8dd4104bb643c97b2e5ebb15b7
+    subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-21-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - yes
+
 AllowedAPKSigningKeys: b2fbab8052e8bc9ee7cb01bc26f309ce972d16fdda34a52bdb15b2628d2ab53d
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags ^v\d+\.\d+\.\d+$
-CurrentVersion: 0.2.1
-CurrentVersionCode: 3
+CurrentVersion: 0.3.0
+CurrentVersionCode: 4

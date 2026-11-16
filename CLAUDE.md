@@ -209,8 +209,15 @@ dev machine the default `java-25` is a JRE, so build with
   POST_NOTIFICATIONS request (API 33+) are untested: the test phone is Android 12.
   Hardware keyboard shortcuts were verified with a virtual keyboard: a Python script in
   the chroot (as root) creates a `/dev/uinput` device (Android 12's `input` has no
-  `keycombination`). Ctrl+Shift+V pasted and Ctrl+Shift+T opened a tab. Still untested:
-  Ctrl+Shift+C (needs a touch selection) and pinch-to-zoom (no multi-touch over adb).
+  `keycombination`). Ctrl+Shift+V pasted and Ctrl+Shift+T opened a tab. **Ctrl+Shift+C
+  never copied** (found 2026-11-16, selection made with `input swipe X Y X Y 1200`):
+  the keyboard sends Ctrl/Shift as key events of their own, and `TerminalView.onKeyDown`
+  calls `stopTextSelectionMode()` for any key while `isSelectingText()` (javap of
+  v0.118.3). `onShortcut` now consumes modifier-only events while selecting; verified on
+  the S9 with the CI release build of `43f1f15` (copied `selectme42`, pasted back). Test
+  pitfall: plugging in a keyboard (uinput device) is a `keyboard` config change and
+  also ends the selection, so connect it first and long-press afterwards. Still
+  untested: pinch-to-zoom (no multi-touch over adb).
 - User names: `[a-z_][a-z0-9_-]{0,31}`, minus the accounts that already exist in
   Ubuntu Base (`setup.sh` would reuse them and grant sudo). Without `--uid`, `setup.sh`
   takes the first id >= 9000 that is free as both uid and gid.

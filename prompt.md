@@ -1,141 +1,173 @@
-# Project: UbuRoot — rooted Ubuntu ARM64 chroot terminal, deeply integrated with Android
+# UbuRoot — next milestone: NetHunter-level installation and management
+
+## Context
+You are working on UbuRoot (`com.reinanbr.uburoot`), an Android app that installs and runs
+an Ubuntu Base rootfs in a chroot using root (Magisk / KernelSU / APatch), with a real PTY
+terminal and deep Android integration. Phases 1–5 of `prompt.md` are done (v0.2.1).
+
+**Read `CLAUDE.md` in full before anything else.** It is the source of truth for
+architecture, paths, mount design, the critical safety rule, root-manager differences and
+everything already verified on the device. Do not re-derive or contradict it; extend it.
+
+The reference for this milestone is Kali NetHunter's installation and management layer:
+- https://www.kali.org/docs/nethunter/installing-nethunter/
+- https://www.kali.org/docs/nethunter/ (editions, components)
+- https://www.kali.org/docs/nethunter/nethunter-chroot-manager/
+- https://www.kali.org/docs/nethunter/nethunter-kex-manager/
+- https://www.kali.org/docs/nethunter/nethunter-components/
+
+NetHunter offers: several install channels (pre-built per device, generic installers per
+architecture, recovery zip, Magisk module), editions by capability (Rootless / Lite /
+Full), minimal and full chroots, a chroot manager (install, backup, restore, remove), a
+services manager with run-at-boot, custom commands in the launcher, a desktop (KeX over
+VNC/HDMI/cast) with audio, a status home screen (interfaces, HID status), kernel and
+module management, USB gadget control, settings backup, an update channel, a supported
+device list and a porting/testing checklist.
 
 ## Goal
-An open-source native Android app (Kotlin) that installs and runs a full Ubuntu arm64
-system in a chroot using root (Magisk, KernelSU or APatch), with a real PTY terminal and
-deep Android integration: Ubuntu can call Android binaries (am, pm, cmd, settings),
-access /sdcard, /data and /system, post notifications, and open files/URLs in Android.
-Target device: de-Googled Android (LineageOS/AOSP, no GApps). Forbidden: Firebase,
-Google Play Services, Play Core, or any proprietary/Google dependency. The app must be
-eligible for F-Droid inclusion.
+Bring UbuRoot to the same level of **installation, lifecycle management, diagnostics and
+platform integration**, adapted to what UbuRoot is: a general-purpose Ubuntu for rooted,
+de-Googled phones, eligible for F-Droid.
 
-Everything in English: code, comments, commit messages, docs, UI strings, scripts.
+## Non-goals (do not implement)
+- Offensive modules: HID/BadUSB payloads, DuckHunter, rogue AP / captive portal, WPS
+  attacks, payload generators. Users install security tools with `apt`; UbuRoot provides
+  the platform, not the attacks.
+- Building or flashing kernels. Detecting and reporting kernel capabilities is in scope.
+- An app store, or hosting our own rootfs tarballs. The only rootfs source stays
+  Canonical (`cdimage.ubuntu.com`) or a file the user picks.
+- systemd as PID 1.
 
-## Stack (decided — do not change)
-- Kotlin, Jetpack Compose for setup/settings screens; terminal via Termux's `TerminalView`
-  embedded with `AndroidView`.
-- Terminal: `com.github.termux.termux-app:terminal-view` and `terminal-emulator` via JitPack
-  (Apache 2.0). Check the latest stable tag before pinning.
-- Root: `com.github.topjohnwu.libsu:core` (persistent root shell).
-- minSdk 26, latest stable targetSdk, arm64-v8a only.
-- Package: com.reinanbr.uburoot. Gradle Kotlin DSL + version catalog.
-- Minimal dependencies. No Hilt/Room/Retrofit — DownloadManager or HttpURLConnection is
-  enough to fetch the rootfs.
+## Constraints (inherited, non-negotiable)
+- CRITICAL SAFETY RULE from `CLAUDE.md`: every recursive deletion under `UBU_BASE` goes
+  through `ubu_safe_rm`. Every new feature that touches the rootfs (backup, restore, move,
+  upgrade, remove) must come with a test that sabotages the unmount and proves the abort
+  path (`tests/test_reset_guard.sh` style + the Docker suite).
+- System logic in POSIX `sh` scripts under `app/src/main/assets/uburoot/bin/`, testable via
+  `adb shell su --mount-master -c ...` without the app; `shellcheck -s sh` clean; no
+  bashisms (mksh/busybox/toybox).
+- Always `su --mount-master`, command as one string.
+- No Google/proprietary dependencies, no analytics, no new network endpoints except
+  Canonical mirrors, GitHub releases (only where stated below) and what the user configures.
+- UI strings in `values/strings.xml` (English) **and** `values-pt-rBR/strings.xml`.
+- Never invent flags, APIs, URLs or library versions: verify at the source and record the
+  evidence (file, line, date) in `CLAUDE.md`.
+- Everything in English: code, comments, commits, docs.
 
-## Architecture
-System logic lives in SHELL SCRIPTS (assets), not Kotlin. The app copies the scripts,
-runs them via su, and displays the terminal. Everything must be testable through
-`adb shell su` without the app.
+## Phase 0 — gap analysis (no code)
+1. Read the NetHunter pages above and the current UbuRoot code.
+2. Write `docs/NETHUNTER_PARITY.md`: one table, one row per NetHunter capability, with
+   columns *NetHunter*, *UbuRoot today*, *Planned UbuRoot equivalent*, *Phase*, *Out of
+   scope (why)*.
+3. Propose changes to the phase list below if the analysis justifies them (order, split,
+   drop). **Stop and show me the table and the final phase list before Phase 1.**
 
-Rootfs at `/data/local/uburoot/rootfs`; scripts at `/data/local/uburoot/bin/`:
-- `common.sh` — detects busybox (/data/adb/magisk/busybox, /data/adb/ksu/bin/busybox,
-  /data/adb/ap/bin/busybox) with toybox fallback; shared variables (ROOTFS, etc.).
-- `mount.sh` — idempotent (check /proc/mounts before every mount):
-  - /proc (proc), /sys (sysfs), /dev (bind), /dev/pts (bind), /dev/shm (tmpfs)
-  - /sdcard → rootfs/sdcard (bind) [toggle]
-  - Android integration [toggle]: bind /system, /vendor, /product, /apex, /linkerconfig,
-    /data at the SAME paths inside the rootfs so Android binaries (bionic, linker64) run
-    inside the chroot.
-- `umount.sh` — unmounts everything under ROOTFS in reverse depth order by parsing
-  /proc/mounts; falls back to `umount -l`. Exits non-zero if any mount remains.
-- `enter.sh [user] [cmd]` — calls mount.sh, then
-  `exec chroot $ROOTFS /usr/bin/env -i HOME=... TERM=xterm-256color LANG=C.UTF-8 PATH=... /bin/bash -l`
-  (or `su - user` inside the chroot).
-- `android-env` — on first enter, captures the Android environment (BOOTCLASSPATH,
-  ANDROID_ROOT, ANDROID_DATA, DEX2OATBOOTCLASSPATH, SYSTEMSERVERCLASSPATH, etc.) into
-  rootfs/etc/android.env. Wrappers in /usr/local/bin (`am`, `pm`, `cmd`, `settings`,
-  `dumpsys`, `getprop`) source it and exec /system/bin/<x>.
+## Phases (ranked by value/risk; stop at the end of each and show the result)
 
-Mount namespace: mounts must be visible across sessions. Detect the root implementation
-and use the matching mount-master flag (Magisk: `su --mount-master`; for KernelSU and
-APatch check their current docs/source for the equivalent — do not guess). Document each
-implementation's behavior in CLAUDE.md and docs/ROOT_IMPLEMENTATIONS.md.
+### Phase 1 — install hardening and diagnostics
+1. `uburoot-doctor` (script + Settings button): root manager/version, mount namespace,
+   SELinux mode, Android/kernel version, FBE state, free space, mount table health,
+   iptables backend, DNS, apt reachability and a **kernel capability report** from
+   `/proc/config.gz` or probing when absent (namespaces, overlayfs, tun, binfmt_misc,
+   USB gadget configfs, HID gadget, cfg80211/monitor-capable phys via `iw phy`, CAN,
+   wireguard). Output: human-readable plus a redacted bundle (no IPs, MACs, serials or
+   user names unless the user opts in) that can be shared from the app, and an issue
+   template field that asks for it.
+2. Rootfs versioning: `/etc/uburoot-release` (schema version + install date + Ubuntu
+   release). `setup.sh` gets numbered, idempotent migrations so a new app version can
+   upgrade an old rootfs's integration files safely. Test old → new in Docker.
+3. Install robustness: hold a wake lock and keep the screen on during download/extract
+   (NetHunter warns Android kills the installer otherwise); mirror choice for
+   `ports.ubuntu.com`; **offline install from a local `.tar.gz` / `.tar.xz`** picked with
+   SAF, with optional SHA256.
+4. `docs/COMPATIBILITY.md`: device table (device, ROM, Android, root manager + version,
+   result, doctor bundle link) and a device testing checklist modelled on NetHunter's.
 
-## CRITICAL SAFETY RULE
-Never run `rm -rf` on the rootfs (reset/uninstall) while anything is mounted under it —
-with /data and /sdcard bind-mounted, that WIPES THE PHONE'S REAL DATA.
-Mandatory removal flow: umount.sh → verify via /proc/mounts that nothing under ROOTFS is
-still mounted → abort with an error if anything is → only then `rm -rf`. Cover this with
-an automated test using dummy directories that proves the abort path works.
+### Phase 2 — chroot manager
+New "Ubuntu" management screen + scripts:
+1. **Backup** (`backup.sh`): only with everything unmounted (`umount.sh --kill` first,
+   abort if it fails) or with `--one-file-system` and an explicit exclude list of every
+   bind target; `tar` with numeric owners, permissions and xattrs; compression choice;
+   output to a SAF location; manifest with SHA256 and `/etc/uburoot-release`.
+2. **Restore** (`restore.sh`): verify manifest and checksum, extract into
+   `rootfs.partial`, atomic rename; the old rootfs is only removed through `ubu_safe_rm`.
+3. **Verify** (`dpkg --verify`-based integrity report) and **remove** (existing reset flow).
+4. **Move location** (e.g. to an ext4 adoptable/external partition), if the target
+   filesystem supports ownership, device nodes are not needed and `suid` is possible;
+   refuse FAT/exFAT/FUSE with a clear message.
+5. **Profiles** (NetHunter's minimal/full, done the Ubuntu way): after install, optional
+   package sets applied with `apt` (e.g. *minimal*, *development*, *network tools*,
+   *desktop*). Lists live in a versioned file in assets, not hardcoded in Kotlin.
+6. **Release upgrade** to the next LTS (`do-release-upgrade` or sources rewrite + full
+   upgrade; research which one works without systemd), with a mandatory backup prompt.
 
-## Installer (first run)
-1. Check root (`Shell.isAppGrantedRoot()`), arm64 ABI, root implementation, free space
-   (require ≥ 3 GB).
-2. Download Ubuntu Base arm64 for the latest LTS from cdimage.ubuntu.com/ubuntu-base/releases/
-   (discover the current URL; do not hardcode an old release). Verify SHA256 against the
-   official SHA256SUMS. Progress bar, resumable.
-3. Extract as root: `tar -xpf --numeric-owner` using busybox.
-4. Post-install (`setup.sh`):
-   - /etc/resolv.conf (1.1.1.1, 9.9.9.9; configurable), /etc/hosts, hostname.
-   - Android networking (CONFIG_ANDROID_PARANOID_NETWORK): create groups aid_inet(3003),
-     aid_net_raw(3004), aid_net_admin(3005); add root, the created user and `_apt` to
-     them (or set `APT::Sandbox::User "root";`). Ensure `apt update` works.
-   - sources.list pointing to ports.ubuntu.com/ubuntu-ports.
-   - C.UTF-8 locale, install sudo, create default user (name chosen in setup) with
-     optional passwordless sudo.
-5. Open the terminal.
+### Phase 3 — services and custom commands
+1. `uburoot-svc` (POSIX sh, no systemd): `start|stop|restart|status|enable|disable|logs
+   NAME`, pidfiles in `/run/uburoot/`, logs in `/var/log/uburoot/`, definitions in
+   `/etc/uburoot/services.d/NAME` (command, user, optional readiness check). `enable`
+   integrates with the existing `/etc/uburoot-boot.d/` mechanism; do not create a second
+   boot path. Ship examples: sshd, a VNC desktop (Phase 5).
+2. Services screen: list, status, start/stop, run-at-boot toggle, log tail.
+3. Custom commands (NetHunter's "Custom Commands"): user-defined commands that run in a
+   new tab or in the background with a result notification; pinnable as launcher
+   shortcuts (`ShortcutManager`) and as a Quick Settings tile.
 
-## Android ↔ Ubuntu integration
-- Exported BroadcastReceiver protected by a signature permission, action
-  "com.reinanbr.uburoot.CMD"; Ubuntu-side commands use `am broadcast`:
-  - `uburoot-notify "title" "text"` → notification
-  - `uburoot-open <file|url>` → VIEW intent (resolve /sdcard paths, use FileProvider);
-    also installed as `xdg-open`
-  - `uburoot-clip [text]` → copy to clipboard (read stdin when no argument)
-  - `uburoot-toast`, `uburoot-vibrate <ms>`
-- "Open in UbuRoot" share target that opens a session in the shared file's directory.
+### Phase 4 — status home screen
+Replace the bare preflight-to-terminal flow with a home screen once installed: Ubuntu
+state (mounted / not), sessions, services, network interfaces and addresses, disk usage
+of the rootfs, kernel capability summary from Phase 1, quick actions (terminal, root
+terminal, stop all, repair mounts, doctor). Keep the current preflight logic underneath.
 
-## Terminal / UI
-- Multiple sessions as tabs; each session = TerminalSession running
-  `su <mount-master-flag> -c /data/local/uburoot/bin/enter.sh <user>`.
-- Foreground service keeps sessions alive; notification shows session count with actions
-  "New session", "Stop all" (close sessions + umount.sh) and a wake-lock toggle.
-- Extra keys row: ESC, CTRL, ALT, TAB, arrows, HOME/END, PgUp/PgDn, | ~ / -.
-- Pinch-to-zoom font size, themes (light/dark/Solarized), copy/paste, clickable links,
-  hardware keyboard support (Ctrl+Shift+C/V, Ctrl+Shift+T new tab).
-- Settings: default user, startup command, mount toggles (sdcard, Android integration),
-  DNS, "Repair mounts" button, "Reset Ubuntu" button (enforces the critical rule and
-  requires typing "DELETE" to confirm).
-- All UI strings in res/values/strings.xml (English) so the community can add translations.
+### Phase 5 — desktop (KeX equivalent)
+1. `uburoot-desktop` script: installs on demand a lightweight desktop (research XFCE vs
+   LXQt on arm64 Ubuntu LTS) and a VNC server (TigerVNC), binds to **127.0.0.1 by
+   default**, password required, configurable resolution/DPI; exposing it to the LAN is an
+   explicit opt-in with a warning.
+2. App: start/stop, then hand off to an F-Droid VNC client through an intent (e.g.
+   `vnc://127.0.0.1:5901`; verify which clients — AVNC, bVNC — accept which URI);
+   detect "no client installed" and explain.
+3. Audio: research PulseAudio/PipeWire to Android output inside a chroot (TCP sink,
+   AAudio/OpenSL bridge) and implement only what works on the test device.
+4. Research gate (write findings, do not implement without my approval): Termux:X11 as
+   an alternative display, HDMI/cast notes.
 
-## Extra phase (only after everything else works): autostart on boot
-The app generates a Magisk/KernelSU/APatch-compatible module zip whose `service.sh` runs
-mount.sh at boot and executes /etc/uburoot-boot.d/* inside the chroot (e.g. sshd).
+### Phase 6 — architectures and Android versions
+1. Support `armhf` and `amd64` Ubuntu Base where the device ABI allows it
+   (`ReleaseDiscovery`, `install.sh` arch check, `setup.sh` sources). Keep arm64 default.
+2. Android 13–16: typed `startForeground` (API 34+), POST_NOTIFICATIONS (33+), any new
+   restriction on `--mount-master`, background starts or broadcasts. Verify in AOSP source.
+3. CI: research running the device suite on a rootable x86_64 Android emulator image so
+   amd64 and newer Android are exercised on every push.
 
-## Open-source deliverables
-- LICENSE: Apache-2.0 (compatible with Termux terminal libs and libsu). Add NOTICE
-  crediting termux terminal-emulator/terminal-view and libsu with their licenses.
-- README.md: what it is, screenshots placeholder, requirements (root, arm64), install,
-  build from source, how the chroot/mounts work, security warning about bind mounts,
-  FAQ, trademark disclaimer ("Ubuntu is a trademark of Canonical Ltd. This project is not
-  affiliated with or endorsed by Canonical." — no Ubuntu logo in the app or icon).
-- CONTRIBUTING.md, CODE_OF_CONDUCT.md (Contributor Covenant), SECURITY.md (how to report
-  vulnerabilities), CHANGELOG.md (Keep a Changelog format).
-- .github/: issue templates (bug report incl. device/ROM/root implementation/Android
-  version fields, feature request), PR template.
-- GitHub Actions CI: build debug APK, run unit tests, shellcheck on all scripts, ktlint
-  (or detekt). Release workflow building a signed release APK from tags (signing via repo
-  secrets; never commit keystores).
-- F-Droid readiness: fastlane/metadata/android/en-US/ (title, short/full description,
-  changelogs, screenshots folder), no proprietary deps, no network calls except Ubuntu
-  mirrors and user-configured ones, no analytics/tracking. Document anti-features if any
-  (e.g. "NonFreeNet" does not apply; root required).
-- .gitignore, .editorconfig.
+### Phase 7 — hardware integration (advanced, opt-in, behind a warning screen)
+Only where Phase 1 detects support; always save and restore the original state:
+1. USB gadget via configfs: NCM/RNDIS (phone as USB network to a laptop), ACM serial,
+   mass storage of an image file. Restore Android's own gadget config on stop.
+2. USB OTG devices inside Ubuntu: `/dev/bus/usb` and serial (`ttyUSB*`, `ttyACM*`)
+   access for the user, documented (SDR dongles, microcontrollers, USB Wi-Fi adapters).
+3. Kernel modules: read-only list of loaded and available vendor modules; `modprobe`
+   of an available module only as an explicit advanced action.
 
-## Execution plan (follow phases; stop at the end of each and show me the result)
-1. Shell scripts + shellcheck + critical-rule test with dummy directories. Scripts must
-   work via `adb shell su -c` without the app.
-2. App MVP: root check, installer, one working terminal session.
-3. Multiple sessions, foreground service, extra keys, settings.
-4. Android integration (wrappers, receiver, uburoot-* commands).
-5. Open-source deliverables + CI.
-6. Boot module.
+### Phase 8 — updates, settings backup, documentation
+1. Optional update check against GitHub releases, in a separate build flavor that is
+   **not** used for F-Droid (F-Droid updates the app itself). Off by default.
+2. Export/import of app settings + `uburoot.conf` + services + custom commands (NetHunter
+   backs up `nh_files`).
+3. Docs in `docs/` organised like NetHunter's: installing, first run, chroot manager,
+   services, desktop, hardware, troubleshooting, compatibility, porting/testing
+   checklist. Keep README short and link out. pt-BR versions where the README section
+   already exists in English.
 
-## Working rules
-- Before coding: create CLAUDE.md with architecture, paths, decisions and
-  Magisk/KSU/APatch differences. Keep it updated.
-- If a device is available via `adb devices`, test on it every phase (install APK, run
-  scripts, collect logcat). If not, state clearly what was left untested.
-- Never invent flags/APIs: when unsure (su flags, library versions, Ubuntu URLs), verify
-  at the source first.
-- Small commits per phase using Conventional Commits (feat:, fix:, docs:, ci:...).
+### Optional research — rootless edition (decision document only)
+Evaluate a proot-based fallback for unrooted phones (NetHunter Rootless): what breaks
+(mounts, raw sockets, iptables, boot), performance, maintenance cost, whether it belongs
+in this app or a separate one. Write `docs/ROOTLESS.md`; implement nothing.
+
+## Definition of done for every phase
+- Scripts shellcheck-clean; Docker suite extended and green; unit tests for new Kotlin.
+- Device test on the Samsung Galaxy S9 / LineageOS 19.1 / Magisk 31.1 when `adb devices`
+  shows it; otherwise list precisely what is untested (and on which Android/root manager).
+- Host mount table identical to the baseline after `umount.sh` (as the existing suites do).
+- `CLAUDE.md` (decisions + evidence), `README.md`, `CHANGELOG.md` (Unreleased),
+  `docs/NETHUNTER_PARITY.md` (status column) updated.
+- Small Conventional Commits. Stop and show me the result before the next phase.

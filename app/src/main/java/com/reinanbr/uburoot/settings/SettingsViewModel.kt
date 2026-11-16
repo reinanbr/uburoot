@@ -92,7 +92,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             if (code != 0) error("setup.sh --sources-only failed (exit $code)")
         }
         // Mounts change only on Repair mounts / Stop all (a live mount is never pulled away).
-        if (before != null && before.kernelAccess != config.kernelAccess) Notice.SAVED_REPAIR_NEEDED else Notice.SAVED
+        val accessChanged = before != null &&
+            (before.kernelAccess != config.kernelAccess || before.hardwareAccess != config.hardwareAccess)
+        if (accessChanged) Notice.SAVED_REPAIR_NEEDED else Notice.SAVED
     }
 
     /** Closes every session, releases every mount (killing what is left) and mounts again. */

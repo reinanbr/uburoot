@@ -21,6 +21,8 @@ data class UbuConfig(
     val aptMirror: String = "",
     /** Kernel filesystems, ROM modules and uburoot-kernel inside Ubuntu (mount.sh). */
     val kernelAccess: Boolean = false,
+    /** Device groups, permission rules, takeovers and uburoot-hw inside Ubuntu (mount.sh). */
+    val hardwareAccess: Boolean = false,
     /** Keys this app version doesn't know (hand edits, newer versions): kept as they are. */
     val extra: Map<String, String> = emptyMap(),
 ) {
@@ -38,6 +40,7 @@ data class UbuConfig(
         line("BOOT_START", if (bootStart) "1" else "0")
         if (aptMirror.isNotEmpty()) line("APT_MIRROR", aptMirror)
         line("KERNEL_ACCESS", if (kernelAccess) "1" else "0")
+        line("HARDWARE_ACCESS", if (hardwareAccess) "1" else "0")
         for ((k, v) in extra) if (k !in KNOWN && SHELL_NAME.matches(k)) line(k, v)
     }
 
@@ -64,6 +67,7 @@ data class UbuConfig(
             "BOOT_START",
             "APT_MIRROR",
             "KERNEL_ACCESS",
+            "HARDWARE_ACCESS",
         )
 
         // Accounts that already exist in Ubuntu Base: setup.sh would reuse
@@ -106,6 +110,7 @@ data class UbuConfig(
                 bootStart = flag("BOOT_START", d.bootStart),
                 aptMirror = map["APT_MIRROR"] ?: d.aptMirror,
                 kernelAccess = flag("KERNEL_ACCESS", d.kernelAccess),
+                hardwareAccess = flag("HARDWARE_ACCESS", d.hardwareAccess),
                 extra = map.filterKeys { it !in KNOWN },
             )
         }

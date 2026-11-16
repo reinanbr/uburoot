@@ -193,4 +193,30 @@
     <string name="kernel_lastlog">Log do kernel da inicialização anterior</string>
     <string name="kernel_report">Relatório de recursos do kernel</string>
     <string name="kernel_change_was">antes</string>
+    <string name="settings_hardware_access">Acesso ao hardware</string>
+    <string name="settings_hardware_hint">uburoot-hw dentro do Ubuntu: dar aos usuários os grupos de dispositivos do celular (GPU, entrada, USB, serial e outros), tomar o Wi-Fi do Android, mudar limites da CPU e manter um wake lock. As mudanças ficam registradas e são desfeitas por Parar tudo. Vale depois de Reparar mounts.</string>
+    <string name="hw_warning_title">Dar ao Ubuntu o controle do hardware?</string>
+    <string name="hw_warning_body">Com acesso ao hardware, o root do Ubuntu pode entregar os dispositivos do celular a usuários do Ubuntu, desligar o Wi-Fi do Android para usar o chip, mudar frequências da CPU, manter wake locks e abrir nós de barramento. O celular pode perder o Wi-Fi, gastar mais bateria ou esquentar mais até a mudança ser desfeita. Limites térmicos e configurações de carregador e bateria continuam só leitura. As mudanças feitas com uburoot-hw são desfeitas por Parar tudo, Desfazer mudanças ou um reinício.</string>
+    <string name="hw_title">Hardware</string>
+    <string name="hw_access_on">O acesso ao hardware está ativo.</string>
+    <string name="hw_access_off">O acesso ao hardware está desativado: ative em Configurações e depois Reparar mounts. Você ainda pode ver o estado e desfazer mudanças.</string>
+    <string name="hw_user">As permissões abaixo são para %1$s, o usuário padrão (Configurações).</string>
+    <string name="hw_user_root">O usuário padrão é root, que já usa todos os dispositivos. Escolha um usuário em Configurações para dar permissões.</string>
+    <string name="hw_classes">Classes de dispositivos</string>
+    <string name="hw_classes_hint">Toque numa classe para ver os nós, quem os usa e os limites. Rotas: direct = a interface do kernel está livre; bridge = pelo Android (Fase 3b); takeover = o Android para de usar; read = só relatório. Uma permissão vale para sessões novas.</string>
+    <string name="hw_granted">%1$s pode usar (grupo %2$s)</string>
+    <string name="hw_not_granted">%1$s precisa de root (grupo %2$s)</string>
+    <string name="hw_grant">Permitir</string>
+    <string name="hw_revoke">Revogar</string>
+    <string name="hw_wifi">Tomar o Wi-Fi</string>
+    <string name="hw_wifi_hint">O Android mantém o Wi-Fi enquanto o iw funciona junto. Tomar o Wi-Fi desliga o Wi-Fi e a busca de redes do Android, e o wlan0 passa a ser do Ubuntu: wpa_supplicant, hostapd (ponto de acesso), buscas.</string>
+    <string name="hw_wifi_take">Tomar o Wi-Fi</string>
+    <string name="hw_wifi_release">Devolver o Wi-Fi ao Android</string>
+    <string name="hw_wifi_take_title">Desligar o Wi-Fi do Android?</string>
+    <string name="hw_wifi_take_body">O celular perde a conexão Wi-Fi até você devolver o Wi-Fi, Parar tudo ou reiniciar. Os programas de Wi-Fi do Ubuntu são parados na devolução.</string>
+    <string name="hw_power">CPU e bateria</string>
+    <string name="hw_cpu_hint">Mude limites da CPU dentro do Ubuntu: sudo uburoot-hw cpu governor|min|max|online ... (registrado). O serviço de energia do celular pode mudar de volta.</string>
+    <string name="hw_wakelock">Manter o celular acordado (wake lock)</string>
+    <string name="hw_changes_hint">Mudanças de kernel e de hardware ficam no mesmo registro: isto desfaz as duas, como Parar tudo.</string>
+    <string name="hw_revert_body">Desfaz todas as mudanças registradas de kernel e de hardware, da mais nova para a mais antiga: permissões de dispositivos, CPU, wake lock, Wi-Fi tomado, configurações do kernel, SELinux, módulos.</string>
 </resources>

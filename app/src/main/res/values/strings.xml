@@ -195,4 +195,30 @@
     <string name="kernel_lastlog">Previous boot\'s kernel log</string>
     <string name="kernel_report">Kernel capability report</string>
     <string name="kernel_change_was">was</string>
+    <string name="settings_hardware_access">Hardware access</string>
+    <string name="settings_hardware_hint">uburoot-hw inside Ubuntu: give users the phone\'s GPU, input, USB, serial and other device groups, take Wi-Fi over from Android, change CPU limits and hold a wake lock. Changes are recorded and undone by Stop all. Applies after Repair mounts.</string>
+    <string name="hw_warning_title">Give Ubuntu control of the hardware?</string>
+    <string name="hw_warning_body">With hardware access, root in Ubuntu can hand the phone\'s devices to Ubuntu users, turn Android\'s Wi-Fi off to use the chip itself, change CPU frequencies, take wake locks and open bus nodes. The phone can lose Wi-Fi, drain the battery faster or run hotter until the change is undone. Thermal limits, charger and battery settings stay read-only. Changes made with uburoot-hw are undone by Stop all, Revert changes or a reboot.</string>
+    <string name="hw_title">Hardware</string>
+    <string name="hw_access_on">Hardware access is on.</string>
+    <string name="hw_access_off">Hardware access is off: turn it on in Settings, then Repair mounts. You can still see the state and revert changes.</string>
+    <string name="hw_user">Grants below are for %1$s, the default user (Settings).</string>
+    <string name="hw_user_root">The default user is root, who can use every device already. Pick a user in Settings to grant classes.</string>
+    <string name="hw_classes">Device classes</string>
+    <string name="hw_classes_hint">Tap a class for its nodes, who uses them and its limits. Routes: direct = the kernel interface is free; bridge = through Android (Phase 3b); takeover = Android stops using it; read = report only. A grant applies to new sessions.</string>
+    <string name="hw_granted">%1$s may use it (group %2$s)</string>
+    <string name="hw_not_granted">%1$s needs root for it (group %2$s)</string>
+    <string name="hw_grant">Grant</string>
+    <string name="hw_revoke">Revoke</string>
+    <string name="hw_wifi">Wi-Fi takeover</string>
+    <string name="hw_wifi_hint">Android keeps Wi-Fi while iw works alongside it. A takeover turns Android\'s Wi-Fi and Wi-Fi scanning off, so wlan0 is Ubuntu\'s: wpa_supplicant, hostapd (access point), scans.</string>
+    <string name="hw_wifi_take">Take Wi-Fi over</string>
+    <string name="hw_wifi_release">Give Wi-Fi back to Android</string>
+    <string name="hw_wifi_take_title">Turn Android\'s Wi-Fi off?</string>
+    <string name="hw_wifi_take_body">The phone loses its Wi-Fi connection until you give Wi-Fi back, Stop all or reboot. Ubuntu\'s Wi-Fi programs are stopped when it goes back.</string>
+    <string name="hw_power">CPU and battery</string>
+    <string name="hw_cpu_hint">Change CPU limits inside Ubuntu: sudo uburoot-hw cpu governor|min|max|online ... (recorded). The phone\'s power service may change them back.</string>
+    <string name="hw_wakelock">Keep the phone awake (wake lock)</string>
+    <string name="hw_changes_hint">Kernel and hardware changes share one log: this reverts both, as Stop all does.</string>
+    <string name="hw_revert_body">Undo every recorded kernel and hardware change, newest first: device permissions, CPU settings, wake lock, Wi-Fi takeover, kernel settings, SELinux, modules.</string>
 </resources>

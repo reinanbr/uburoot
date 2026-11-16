@@ -58,6 +58,11 @@
             android:label="@string/kernel_title" />
 
         <activity
+            android:name=".ui.HardwareActivity"
+            android:exported="false"
+            android:label="@string/hw_title" />
+
+        <activity
             android:name=".ui.AboutActivity"
             android:exported="false"
             android:label="@string/about_title" />

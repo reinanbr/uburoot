@@ -155,6 +155,8 @@ class SettingsActivity : ComponentActivity() {
         var mirror by rememberSaveable(saved) { mutableStateOf(saved.aptMirror) }
         var kernel by rememberSaveable(saved) { mutableStateOf(saved.kernelAccess) }
         var kernelWarning by rememberSaveable { mutableStateOf(false) }
+        var hardware by rememberSaveable(saved) { mutableStateOf(saved.hardwareAccess) }
+        var hardwareWarning by rememberSaveable { mutableStateOf(false) }
 
         val edited = saved.copy(
             defaultUser = if (user == "root") "" else user,
@@ -165,6 +167,7 @@ class SettingsActivity : ComponentActivity() {
             bootStart = boot,
             aptMirror = mirror.trim(),
             kernelAccess = kernel,
+            hardwareAccess = hardware,
         )
         val dnsOk = UbuConfig.isValidDns(dns)
         val mirrorOk = mirror.isBlank() || UbuConfig.isValidMirror(mirror.trim())
@@ -213,6 +216,27 @@ class SettingsActivity : ComponentActivity() {
                 },
                 dismissButton = {
                     TextButton(onClick = { kernelWarning = false }) { Text(stringResource(AndroidR.string.cancel)) }
+                },
+            )
+        }
+
+        Toggle(R.string.settings_hardware_access, hardware) { on ->
+            if (on) hardwareWarning = true else hardware = false
+        }
+        Text(stringResource(R.string.settings_hardware_hint), style = MaterialTheme.typography.bodySmall)
+        if (hardwareWarning) {
+            AlertDialog(
+                onDismissRequest = { hardwareWarning = false },
+                title = { Text(stringResource(R.string.hw_warning_title)) },
+                text = { Text(stringResource(R.string.hw_warning_body)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        hardware = true
+                        hardwareWarning = false
+                    }) { Text(stringResource(R.string.kernel_warning_accept)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { hardwareWarning = false }) { Text(stringResource(AndroidR.string.cancel)) }
                 },
             )
         }

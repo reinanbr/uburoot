@@ -66,6 +66,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.reinanbr.uburoot.R
 import com.reinanbr.uburoot.ui.AboutActivity
+import com.reinanbr.uburoot.ui.HardwareActivity
 import com.reinanbr.uburoot.ui.KernelActivity
 import com.reinanbr.uburoot.ui.MainActivity
 import com.reinanbr.uburoot.ui.SettingsActivity
@@ -287,6 +288,9 @@ class TerminalActivity : ComponentActivity() {
                     }
                     Item(R.string.kernel_title) {
                         startActivity(Intent(this@TerminalActivity, KernelActivity::class.java))
+                    }
+                    Item(R.string.hw_title) {
+                        startActivity(Intent(this@TerminalActivity, HardwareActivity::class.java))
                     }
                     Item(R.string.about_title) {
                         startActivity(Intent(this@TerminalActivity, AboutActivity::class.java))

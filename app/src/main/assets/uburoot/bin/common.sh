@@ -194,11 +194,10 @@ ubu_unescape() {
     esac
 }
 
+# One awk instead of a shell read loop: with Magisk's Zygisk the mount table
+# has ~2000 lines (magic mount binds every file of /system/lib*).
 ubu_is_mounted() {
-    while read -r _dev _mp _rest; do
-        [ "$_mp" = "$1" ] && return 0
-    done <"$UBU_MOUNTS_FILE"
-    return 1
+    bb awk -v p="$1" '$2 == p { f = 1; exit } END { exit !f }' "$UBU_MOUNTS_FILE"
 }
 
 # Mountpoints equal to or below $1, deepest first (stacked mounts repeat).

@@ -62,6 +62,17 @@ if ubu_any_shared_under "$R"; then
     ubu_die "mounts under $R are still shared and propagation could not be changed; NOT unmounting (reboot to clear)"
 fi
 
+# The Android partitions are rbind trees. With Magisk's Zygisk (magic mount)
+# /system/lib and /system/lib64 alone hold ~950 per-file mounts, and
+# unmounting them one by one took 127 s on the test phone. A lazy umount
+# (MNT_DETACH) is recursive: one syscall drops a whole tree. It is safe here
+# because everything under the rootfs is private now, so nothing propagates.
+for _p in $UBU_ANDROID_PARTS; do
+    if ubu_is_mounted "$R$_p"; then
+        bb umount -l "$R$_p" 2>/dev/null || ubu_warn "could not detach $R$_p"
+    fi
+done
+
 _pass=0
 while [ $_pass -lt 5 ]; do
     _list=$(ubu_mounts_under "$R")

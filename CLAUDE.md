@@ -526,6 +526,9 @@ download-artifact v8):
   headers and order; only AGP's dependency-metadata block (`0x504b4453`, encrypted with
   a Google key) differed. It is now off (`dependenciesInfo`), so builds of one commit
   should match. F-Droid also flags that block.
+- v0.2.1 (2026-11-16, the Ctrl+Shift+C fix): CI's release APK of `bd21dc8` was tested on
+  the S9 (terminal, `uburoot-toast`, Ctrl+Shift+C) and is **byte-identical** to the
+  published one (same SHA-256), so the reproducibility fix works.
 - Magisk keeps an uninstalled app's root policy. After uninstalling the debug build,
   uid 10123 still had `policy=2`, and a future app with that uid would get root
   silently. Delete stale rows (`magisk --sqlite "DELETE FROM policies WHERE uid=N"`)
@@ -541,7 +544,8 @@ download-artifact v8):
   `^v\d+\.\d+\.\d+$`. The text comes from `fastlane/metadata` in this repo.
 - `tools/fdroid-check.sh [VERSIONCODE]` runs fdroidserver from PyPI in a temp venv:
   `lint`, `rewritemeta` (must not change the file), then `fdroid build` from the tag,
-  compared with the published APK. 0.2.0 passed: lint clean, scanner clean (it only
+  compared with the published APK (set `JAVA_HOME` to JDK 21: the default `java-25`
+  here is a JRE and Gradle fails). 0.2.0 and 0.2.1 passed: lint clean, scanner clean (it only
   removes `gradle-wrapper.jar`), "compared built binary to supplied reference binary
   successfully". So F-Droid can ship our own signed APK.
 - Policy (current English Inclusion Policy): JitPack.io is a listed trusted Maven repo

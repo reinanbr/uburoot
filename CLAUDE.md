@@ -510,6 +510,16 @@ download-artifact v8):
   LICENSE (Apache-2.0, official text), NOTICE, CONTRIBUTING, CODE_OF_CONDUCT (Contributor
   Covenant 2.1, official text; contact = GitHub private reporting, which is enabled),
   SECURITY, CHANGELOG (Keep a Changelog), issue forms, PR template, `.editorconfig`.
+- v0.2.0 (2026-11-16): CI's signed release APK of `1d634d2` was tested on the S9 before
+  tagging (preflight, terminal, every `uburoot-*` command, share, Settings), and so was
+  the published file. The tag build and the main build had identical zip entries,
+  headers and order; only AGP's dependency-metadata block (`0x504b4453`, encrypted with
+  a Google key) differed. It is now off (`dependenciesInfo`), so builds of one commit
+  should match. F-Droid also flags that block.
+- Magisk keeps an uninstalled app's root policy. After uninstalling the debug build,
+  uid 10123 still had `policy=2`, and a future app with that uid would get root
+  silently. Delete stale rows (`magisk --sqlite "DELETE FROM policies WHERE uid=N"`)
+  after switching between debug and release builds.
 - The R8 release build (1.3 MB vs 11.4 MB debug) was installed on the device:
   preflight, deploy, terminal and the session suite (35/35) passed.
 

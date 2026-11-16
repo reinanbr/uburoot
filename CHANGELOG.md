@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The APK no longer carries AGP's encrypted dependency-metadata block, so two builds of
+  the same commit match (and F-Droid doesn't flag it).
+
 ## [0.2.0] - 2026-11-16
 
 ### Added

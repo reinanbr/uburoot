@@ -22,6 +22,14 @@ android {
         }
     }
 
+    // No dependency metadata block in the APK signing block: it is encrypted
+    // with a Google key, differs on every build (so two builds of one commit
+    // never match byte for byte) and F-Droid flags it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     // Release signing comes from the environment (CI secrets), never from the
     // repo. Unless all four variables are set, the release APK is left unsigned
     // (and CI's release job refuses to publish it).

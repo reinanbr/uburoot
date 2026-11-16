@@ -16,8 +16,8 @@ It targets AOSP/LineageOS-style ROMs and has **no Google dependencies**: no Play
 Services, Firebase or analytics. The only network calls are the Ubuntu servers
 (`cdimage.ubuntu.com`, `ports.ubuntu.com`) and whatever you run yourself.
 
-> **Status: early (v0.1.0).** The installer and one terminal session work. It has been
-> tested on one device so far (see [Tested on](#tested-on)). Expect rough edges, and read
+> **Status: early (v0.2.0).** Everything planned works: installer, terminal tabs, settings,
+> the Android commands and start at boot. It has been tested on one device so far (see [Tested on](#tested-on)). Expect rough edges, and read
 > the [safety warning](#safety-warning) before you use it.
 
 ## Download

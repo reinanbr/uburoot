@@ -4,9 +4,12 @@
 <ul>
 <li>Finds the newest Ubuntu LTS, downloads it with resume support and verifies it against Ubuntu's SHA256SUMS</li>
 <li>Sets up DNS, apt sources, sudo and your user</li>
-<li>Real terminal (PTY) with job control, 256 colors and UTF-8</li>
+<li>Real terminal (PTY) with job control, 256 colors and UTF-8, in tabs that keep running in the background</li>
+<li>Extra keys, themes, pinch to zoom, clickable links and hardware keyboard shortcuts</li>
 <li>Your shared storage (/sdcard) and Android's own commands (pm, am, cmd, settings, dumpsys...) inside Ubuntu</li>
-<li>The APK is also a Magisk/KernelSU/APatch module</li>
+<li>uburoot-notify, uburoot-toast, uburoot-vibrate, uburoot-clip and uburoot-open (xdg-open): talk to Android from Ubuntu</li>
+<li>"Open in UbuRoot" share target: a terminal in the shared file's folder</li>
+<li>The APK is also a Magisk/KernelSU/APatch module, which can start Ubuntu and your services at boot</li>
 <li>No Google services, no analytics. Network access only to Ubuntu's servers and whatever you run yourself</li>
 </ul>
 

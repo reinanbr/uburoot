@@ -1,0 +1,1 @@
+Terminal tabs kept alive in the background, extra keys, themes and settings. New uburoot-notify/toast/vibrate/clip/open (xdg-open) commands talk to Android, and "Open in UbuRoot" opens a shared file's folder. With the module, Ubuntu can start at boot and run your scripts (e.g. sshd). Unmounting is fast again with Magisk Zygisk.

@@ -216,6 +216,67 @@ check "bridge.sh cwd: /root refused for the user" sh -c "! $B/bridge.sh cwd /roo
 check "bridge.sh cwd: relative path refused" sh -c "! $B/bridge.sh cwd home/tester"
 rm -f /data/local/uburoot/uburoot.conf
 
+section "boot autostart (boot.sh, module service.sh)"
+$B/umount.sh --kill >/dev/null 2>&1
+check "BOOT_START off: boot.sh does nothing" $B/boot.sh
+check "BOOT_START off: nothing mounted" test "$(mounted_under $R)" = 0
+out=$($B/boot.sh --status 2>/dev/null)
+check "status: no module" test "$out" = "$(printf 'module=missing\nboot_start=0')"
+mkdir -p /tmp/fakeadb/modules/uburoot
+check "status: module enabled" sh -c "UBU_MODULES=/tmp/fakeadb $B/boot.sh --status | grep -qx module=enabled"
+touch /tmp/fakeadb/modules/uburoot/disable
+check "status: module disabled" sh -c "UBU_MODULES=/tmp/fakeadb $B/boot.sh --status | grep -qx module=disabled"
+mkdir -p /tmp/fakeadb/modules_update/uburoot
+check "status: module pending (reboot)" sh -c "UBU_MODULES=/tmp/fakeadb $B/boot.sh --status | grep -qx module=pending"
+rm -rf /tmp/fakeadb
+mkdir -p $R/etc/uburoot-boot.d
+D=$R/etc/uburoot-boot.d
+printf '#!/bin/sh\necho "$(id -u) $(id -G) $HOME $(pwd)" >/tmp/boot-10\n' >$D/10-hello
+printf '#!/bin/sh\nsetsid sleep 500 </dev/null >/dev/null 2>&1 &\necho started >/tmp/boot-20\n' >$D/20-daemon
+printf '#!/bin/sh\nsleep 8\necho late >/tmp/boot-30\n' >$D/30-slow
+printf '#!/bin/sh\nexit 3\n' >$D/40-fail
+printf '#!/bin/sh\necho ran >/tmp/boot-50\n' >$D/50-last
+printf '#!/bin/sh\necho ran >/tmp/boot-readme\n' >$D/README.sh
+printf '#!/bin/sh\necho ran >/tmp/boot-noexec\n' >$D/60-noexec
+chmod 755 $D/10-hello $D/20-daemon $D/30-slow $D/40-fail $D/50-last $D/README.sh
+chmod 644 $D/60-noexec
+ln -s 10-hello $D/70-link
+printf "BOOT_START='1'\nBOOT_SCRIPT_TIMEOUT='2'\n" >/data/local/uburoot/uburoot.conf
+$B/boot.sh >/tmp/boot.log 2>&1
+rc=$?
+check "boot.sh exit 1 when a script fails (got $rc)" test "$rc" = 1
+check "mounted at boot" test "$(mounted_under $R)" -gt 0
+check "scripts run as root with the session env" sh -c "grep -q '^0 .*3003.* /root /root\$' $R/tmp/boot-10"
+check "groups include aid_inet" grep -qw 3003 $R/tmp/boot-10
+check "forked daemon survives its script" sh -c "for p in /proc/[0-9]*; do [ \"\$(readlink \$p/root)\" = $R ] && tr '\\0' ' ' <\$p/cmdline 2>/dev/null | grep -q 'sleep 500' && exit 0; done; exit 1"
+check "slow script left running, next ones started" sh -c "grep -q '30-slow still running' /tmp/boot.log && [ -f $R/tmp/boot-50 ] && [ ! -f $R/tmp/boot-30 ]"
+check "failure logged" grep -q '40-fail: failed (exit 3)' /tmp/boot.log
+check "name order kept" sh -c "awk '/starting/ {print \$NF}' /tmp/boot.log | tr '\n' ' ' | grep -qx '10-hello 20-daemon 30-slow 40-fail 50-last '"
+check "README.sh, non-executable and symlinked scripts skipped" sh -c "[ ! -e $R/tmp/boot-readme ] && [ ! -e $R/tmp/boot-noexec ] && ! grep -q 70-link /tmp/boot.log"
+sleep 7
+check "slow script finished on its own" test -f $R/tmp/boot-30
+# service.sh as the root manager runs it, with getprop saying the boot completed.
+mkdir -p /tmp/svcbin /tmp/mod
+printf '#!/bin/sh\n[ "$1" = sys.boot_completed ] && echo 1 || echo test/fingerprint/1\n' >/tmp/svcbin/getprop
+chmod 755 /tmp/svcbin/getprop
+cp /src/app/src/module/service.sh /tmp/mod/service.sh
+rm -f $R/tmp/boot-* /data/local/uburoot/boot.log /data/local/uburoot/boot.log.old
+echo old >/data/local/uburoot/boot.log
+PATH=/tmp/svcbin:$PATH sh /tmp/mod/service.sh
+check "service.sh ran boot.sh (log written)" grep -q 'boot scripts done' /data/local/uburoot/boot.log
+check "service.sh kept the previous log" grep -qx old /data/local/uburoot/boot.log.old
+check "service.sh: scripts ran" test -f $R/tmp/boot-50
+rm -f $R/tmp/boot-*
+chmod 777 $B/boot.sh
+PATH=/tmp/svcbin:$PATH sh /tmp/mod/service.sh
+check "service.sh refuses a world-writable boot.sh" test ! -e $R/tmp/boot-10
+chmod 755 $B/boot.sh
+check "boot.sh --now runs with BOOT_START off" sh -c "echo \"BOOT_START='0'\" >/data/local/uburoot/uburoot.conf; $B/boot.sh --now; [ -f $R/tmp/boot-10 ]"
+rm -rf $D $R/tmp/boot-* /tmp/mod /tmp/svcbin /data/local/uburoot/boot.log /data/local/uburoot/boot.log.old
+rm -f /data/local/uburoot/uburoot.conf
+$B/umount.sh --kill >/dev/null 2>&1
+check "boot daemons stopped by umount.sh --kill" test "$(mounted_under $R)" = 0
+
 section "hangup.sh (closing one terminal tab)"
 # A real pty, as the app's sessions have: script(1) runs enter.sh on one.
 sleep 600 | script -qfc "$B/enter.sh tester" /dev/null >/dev/null 2>&1 &

@@ -47,10 +47,33 @@ ubu_load_config() {
     UBU_HOSTNAME="uburoot"
     SDCARD_SOURCE=""
     INOTIFY_MAX_WATCHES=524288
+    BOOT_START=0
+    BOOT_SCRIPT_TIMEOUT=60
     if [ -f "$UBU_CONFIG" ]; then
         # shellcheck source=/dev/null
         . "$UBU_CONFIG"
     fi
+}
+
+# Where /sdcard comes from: SDCARD_SOURCE, else the first candidate that looks
+# real. Before the user's first unlock (file-based encryption) the names in
+# /data/media/0 are encrypted, so none matches yet (boot.sh waits for it).
+ubu_sdcard_source() {
+    if [ -n "$SDCARD_SOURCE" ]; then
+        printf '%s' "$SDCARD_SOURCE"
+        return 0
+    fi
+    # /data/media/0 first: the FUSE view (/storage/emulated/0) returns EFAULT
+    # to every non-root uid that isn't an app (MediaProvider can't map it to a
+    # package), so the chroot user couldn't use it. Group aid_media_rw (1023)
+    # gives the user access; the cost is no MediaStore notification.
+    for _s in /data/media/0 /storage/emulated/0 /mnt/user/0/emulated/0; do
+        if [ -d "$_s/Android" ] || [ -d "$_s/Download" ]; then
+            printf '%s' "$_s"
+            return 0
+        fi
+    done
+    return 1
 }
 
 # ---------------------------------------------------------------------------

@@ -59,23 +59,6 @@ if [ -n "$_kh" ] && [ -f "$R/etc/hosts" ] &&
 fi
 
 # 2) Shared storage [MOUNT_SDCARD]
-ubu_sdcard_source() {
-    if [ -n "$SDCARD_SOURCE" ]; then
-        printf '%s' "$SDCARD_SOURCE"
-        return 0
-    fi
-    # /data/media/0 first: the FUSE view (/storage/emulated/0) returns EFAULT
-    # to every non-root uid that isn't an app (MediaProvider can't map it to a
-    # package), so the chroot user couldn't use it. Group aid_media_rw (1023)
-    # gives the user access; the cost is no MediaStore notification.
-    for _s in /data/media/0 /storage/emulated/0 /mnt/user/0/emulated/0; do
-        if [ -d "$_s/Android" ] || [ -d "$_s/Download" ]; then
-            printf '%s' "$_s"
-            return 0
-        fi
-    done
-    return 1
-}
 if [ "$MOUNT_SDCARD" = 1 ]; then
     if _src=$(ubu_sdcard_source); then
         ubu_bind bind "$_src" "$R/sdcard" || ubu_warn "bind $_src -> /sdcard failed"

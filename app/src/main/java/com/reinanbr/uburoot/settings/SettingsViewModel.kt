@@ -17,7 +17,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class Notice { SAVED, REPAIRED, REPAIR_FAILED, RESET_REFUSED, RESET_FAILED, BOOT_RAN, BOOT_FAILED }
+enum class Notice {
+    SAVED,
+    SAVED_REPAIR_NEEDED,
+    REPAIRED,
+    REPAIR_FAILED,
+    RESET_REFUSED,
+    RESET_FAILED,
+    BOOT_RAN,
+    BOOT_FAILED,
+}
 
 /** State of the UbuRoot root module, from `boot.sh --status`. */
 enum class ModuleState { ENABLED, DISABLED, REMOVING, PENDING, MISSING, UNKNOWN }
@@ -82,7 +91,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             val code = RootShell.stream("${UbuPaths.script("setup.sh")} --sources-only", ::log)
             if (code != 0) error("setup.sh --sources-only failed (exit $code)")
         }
-        Notice.SAVED
+        // Mounts change only on Repair mounts / Stop all (a live mount is never pulled away).
+        if (before != null && before.kernelAccess != config.kernelAccess) Notice.SAVED_REPAIR_NEEDED else Notice.SAVED
     }
 
     /** Closes every session, releases every mount (killing what is left) and mounts again. */

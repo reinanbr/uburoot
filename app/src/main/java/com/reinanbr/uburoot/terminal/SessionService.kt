@@ -83,7 +83,11 @@ class SessionService : Service() {
         ServiceCompat.startForeground(this, NOTIFICATION_ID, buildNotification(), type)
     }
 
-    /** Close every session, then release the mounts (killing anything left in the chroot). */
+    /**
+     * Close every session, release the mounts (killing anything left in the chroot), then
+     * revert the kernel changes recorded by uburoot-kernel (after the kill, so modules
+     * are no longer in use).
+     */
     private fun stopAll() {
         if (stopping) return
         stopping = true
@@ -91,7 +95,10 @@ class SessionService : Service() {
         // umount.sh --kill can take a while (tens of seconds on slow devices).
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
         scope.launch {
-            val r = RootShell.run("${UbuPaths.script("umount.sh")} --kill")
+            val r = RootShell.run(
+                "${UbuPaths.script("umount.sh")} --kill; u=\$?; ${UbuPaths.script("kernel.sh")} -y revert; " +
+                    "k=\$?; [ \$u = 0 ] && [ \$k = 0 ]",
+            )
             val msg = if (r.ok) getString(R.string.stopped_all) else getString(R.string.stop_all_failed, r.text)
             Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG).show()
             stopping = false

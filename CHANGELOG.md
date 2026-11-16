@@ -7,6 +7,24 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Kernel access** (opt-in, Settings → Kernel, with a warning). It applies after
+  *Repair mounts*:
+  - root in Ubuntu gets the host's configfs, debugfs, tracefs, BPF filesystem, cgroups
+    (v2 and the v1 controllers at `/dev/*`), pstore and selinuxfs, plus securityfs,
+    fusectl and binfmt_misc where the kernel has them;
+  - the ROM's kernel modules are bound read-only and indexed with `depmod`.
+- `uburoot-kernel` (status, sysctls, developer mode, SELinux mode, modules, previous
+  boot's log, revert), `uburoot-kmod` and `uburoot-kbuild` (what this kernel accepts,
+  prepare a matching source tree, build out-of-tree modules).
+- Every kernel change is recorded with its original value and undone newest first by
+  *Stop all*, *Revert changes* or a reboot.
+- Kernel screen (menu → Kernel): state, developer mode, the SELinux switch, recorded
+  changes, loaded modules, live kernel log, previous boot's log, the doctor's kernel
+  report.
+- `simpleperf` wrapper; `kmod` installed by setup.
+- `docs/KERNEL.md`.
+
 ## [0.3.0] - 2026-11-16
 
 ### Added

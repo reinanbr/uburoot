@@ -19,6 +19,8 @@ data class UbuConfig(
     val bootStart: Boolean = false,
     /** http:// Ubuntu ports mirror for the release suites (empty = ports.ubuntu.com); setup.sh. */
     val aptMirror: String = "",
+    /** Kernel filesystems, ROM modules and uburoot-kernel inside Ubuntu (mount.sh). */
+    val kernelAccess: Boolean = false,
     /** Keys this app version doesn't know (hand edits, newer versions): kept as they are. */
     val extra: Map<String, String> = emptyMap(),
 ) {
@@ -35,6 +37,7 @@ data class UbuConfig(
         if (sdcardSource.isNotEmpty()) line("SDCARD_SOURCE", sdcardSource)
         line("BOOT_START", if (bootStart) "1" else "0")
         if (aptMirror.isNotEmpty()) line("APT_MIRROR", aptMirror)
+        line("KERNEL_ACCESS", if (kernelAccess) "1" else "0")
         for ((k, v) in extra) if (k !in KNOWN && SHELL_NAME.matches(k)) line(k, v)
     }
 
@@ -60,6 +63,7 @@ data class UbuConfig(
             "SDCARD_SOURCE",
             "BOOT_START",
             "APT_MIRROR",
+            "KERNEL_ACCESS",
         )
 
         // Accounts that already exist in Ubuntu Base: setup.sh would reuse
@@ -101,6 +105,7 @@ data class UbuConfig(
                 sdcardSource = map["SDCARD_SOURCE"] ?: d.sdcardSource,
                 bootStart = flag("BOOT_START", d.bootStart),
                 aptMirror = map["APT_MIRROR"] ?: d.aptMirror,
+                kernelAccess = flag("KERNEL_ACCESS", d.kernelAccess),
                 extra = map.filterKeys { it !in KNOWN },
             )
         }

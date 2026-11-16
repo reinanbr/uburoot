@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.ui
 
+import android.R as AndroidR
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -152,6 +153,8 @@ class SettingsActivity : ComponentActivity() {
         var dns by rememberSaveable(saved) { mutableStateOf(saved.dnsServers) }
         var boot by rememberSaveable(saved) { mutableStateOf(saved.bootStart) }
         var mirror by rememberSaveable(saved) { mutableStateOf(saved.aptMirror) }
+        var kernel by rememberSaveable(saved) { mutableStateOf(saved.kernelAccess) }
+        var kernelWarning by rememberSaveable { mutableStateOf(false) }
 
         val edited = saved.copy(
             defaultUser = if (user == "root") "" else user,
@@ -161,6 +164,7 @@ class SettingsActivity : ComponentActivity() {
             dnsServers = dns.trim().replace(Regex("\\s+"), " "),
             bootStart = boot,
             aptMirror = mirror.trim(),
+            kernelAccess = kernel,
         )
         val dnsOk = UbuConfig.isValidDns(dns)
         val mirrorOk = mirror.isBlank() || UbuConfig.isValidMirror(mirror.trim())
@@ -192,6 +196,26 @@ class SettingsActivity : ComponentActivity() {
         Toggle(R.string.settings_mount_sdcard, sdcard) { sdcard = it }
         Toggle(R.string.settings_android_integration, android) { android = it }
         Text(stringResource(R.string.settings_mounts_hint), style = MaterialTheme.typography.bodySmall)
+
+        Section(R.string.settings_kernel)
+        Toggle(R.string.settings_kernel_access, kernel) { on -> if (on) kernelWarning = true else kernel = false }
+        Text(stringResource(R.string.settings_kernel_hint), style = MaterialTheme.typography.bodySmall)
+        if (kernelWarning) {
+            AlertDialog(
+                onDismissRequest = { kernelWarning = false },
+                title = { Text(stringResource(R.string.kernel_warning_title)) },
+                text = { Text(stringResource(R.string.kernel_warning_body)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        kernel = true
+                        kernelWarning = false
+                    }) { Text(stringResource(R.string.kernel_warning_accept)) }
+                },
+                dismissButton = {
+                    TextButton(onClick = { kernelWarning = false }) { Text(stringResource(AndroidR.string.cancel)) }
+                },
+            )
+        }
 
         Section(R.string.settings_network)
         OutlinedTextField(
@@ -383,6 +407,7 @@ class SettingsActivity : ComponentActivity() {
     private fun NoticeText(notice: Notice) {
         val (text, error) = when (notice) {
             Notice.SAVED -> R.string.notice_saved to false
+            Notice.SAVED_REPAIR_NEEDED -> R.string.notice_saved_repair to false
             Notice.REPAIRED -> R.string.notice_repaired to false
             Notice.REPAIR_FAILED -> R.string.notice_repair_failed to true
             Notice.RESET_REFUSED -> R.string.notice_reset_refused to true

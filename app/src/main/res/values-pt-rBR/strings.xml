@@ -162,4 +162,34 @@
     <string name="doctor_not_redacted">Este relatório inclui identificadores. Confira antes de compartilhar.</string>
     <string name="action_share">Compartilhar</string>
     <string name="action_copy">Copiar</string>
+    <string name="settings_kernel">Kernel</string>
+    <string name="settings_kernel_access">Acesso ao kernel</string>
+    <string name="settings_kernel_hint">O root do Ubuntu passa a ter as interfaces do próprio kernel: configfs (gadget USB), debugfs, tracefs, BPF, cgroups, pstore, SELinux, os módulos de kernel da ROM e uburoot-kernel / uburoot-kmod / uburoot-kbuild. As mudanças feitas com eles ficam registradas e são desfeitas por Parar tudo. Vale depois de Reparar mounts.</string>
+    <string name="kernel_warning_title">Dar ao Ubuntu o controle do kernel?</string>
+    <string name="kernel_warning_body">Com acesso ao kernel, o root do Ubuntu controla o kernel do celular: pode mudar configurações do kernel, carregar módulos, trocar o modo do SELinux, reconfigurar o USB e rastrear tudo o que roda. Um erro pode travar ou deixar o celular lento até reiniciar. As mudanças feitas com uburoot-kernel ficam registradas e são desfeitas por Parar tudo, Desfazer mudanças ou um reinício; as feitas à mão (echo em /proc/sys, insmod) não. Usuários sem sudo não ganham nada.</string>
+    <string name="kernel_warning_accept">Entendi, ativar</string>
+    <string name="notice_saved_repair">Salvo. O acesso ao kernel muda ao Reparar mounts (ou depois de Parar tudo).</string>
+    <string name="kernel_title">Kernel</string>
+    <string name="kernel_access_on">O acesso ao kernel está ativo.</string>
+    <string name="kernel_access_off">O acesso ao kernel está desativado: ative em Configurações e depois Reparar mounts. Você ainda pode ver o estado e desfazer mudanças.</string>
+    <string name="kernel_state">Estado atual</string>
+    <string name="kernel_devmode">Modo desenvolvedor</string>
+    <string name="kernel_devmode_hint">Deixa o root (e só o root) ler endereços do kernel (kptr_restrict = 1), para ferramentas de perf, trace e depuração. dmesg e perf já funcionam para o root.</string>
+    <string name="kernel_permissive">SELinux permissivo</string>
+    <string name="kernel_permissive_hint">O root do Ubuntu não precisa disso: o domínio do gerenciador de root já não tem restrições. Isso desliga o SELinux para todos os apps do celular.</string>
+    <string name="kernel_permissive_title">Desligar o SELinux para o celular inteiro?</string>
+    <string name="kernel_permissive_body">O modo permissivo tira a proteção do SELinux de TODOS os apps e serviços do celular, não só do Ubuntu. Malwares ficam muito mais fáceis. Dura até você voltar, Desfazer mudanças, Parar tudo ou reiniciar.</string>
+    <string name="kernel_permissive_accept">Mudar para permissivo</string>
+    <string name="kernel_changes">Mudanças registradas: %1$d</string>
+    <string name="kernel_changes_hint">Feitas com uburoot-kernel / uburoot-kmod, aqui ou dentro do Ubuntu. Parar tudo e um reinício também as desfazem.</string>
+    <string name="kernel_revert">Desfazer mudanças</string>
+    <string name="kernel_revert_body">Desfaz todas as mudanças registradas, da mais nova para a mais antiga: descarrega os módulos carregados pelo UbuRoot e restaura as configurações do kernel e o SELinux.</string>
+    <string name="kernel_modules">Módulos carregados</string>
+    <string name="kernel_modules_none">Nenhum módulo de kernel carregado.</string>
+    <string name="kernel_modules_hint">* = carregado pelo UbuRoot. Carregue módulos dentro do Ubuntu com sudo uburoot-kmod load ARQUIVO.ko; uburoot-kbuild check diz o que este kernel aceita.</string>
+    <string name="kernel_unload">Descarregar %1$s</string>
+    <string name="kernel_logs">Logs e relatório</string>
+    <string name="kernel_dmesg">Log do kernel (dmesg -w)</string>
+    <string name="kernel_lastlog">Log do kernel da inicialização anterior</string>
+    <string name="kernel_report">Relatório de recursos do kernel</string>
 </resources>

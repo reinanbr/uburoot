@@ -472,10 +472,14 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
     and from `kernel.sh -y revert` restored policy4 max, policy0 governor, `led_r` and the
     wake lock. From adb: `status` 2.1 s, takeover 1.0 s, release 0.5 s (`kill_ubuntu_exe`
     is one `ls -l /proc/*/exe | awk`; the readlink loop made a release from the app ~20 s).
-  - **Terminal menu: "Close session" is always there** (disabled without a session).
-    After *Repair mounts* the terminal recreates its session asynchronously; the item
-    appeared while the menu was open and shifted every item below it by 120 px, so a tap
-    on *Hardware* opened *Kernel* (seen twice over adb, dump bounds vs. the started activity).
+  - **Terminal menu jumped under the finger.** With the keyboard up, opening the menu
+    hides the IME (the popup takes the focus; `mInputShown` true → false), the window
+    resizes (`adjustResize`) and the open popup moved 120 px down 1–3 s later (dumps at
+    t1/t2/t3: *Hardware* at y 1584, then 1704). Taps planned on the first layout opened
+    *Kernel* or *About*. Now ⋮ hides the keyboard first and opens the menu once
+    `WindowInsets.isImeVisible` is false (1.5 s fallback). "Close session" is also always
+    in the menu (disabled without a session). An earlier guess, that the item was
+    inserted while the menu was open, was wrong: the dumps had it both times.
   - **Change-log lock and SIGPIPE.** Under dash, `uburoot-kernel status | grep -q ...`
     left `state/.lock` forever: grep exits early, dash dies of SIGPIPE and runs no EXIT
     trap (mksh did, so the suite only saw it once the tools ran with Ubuntu's `/bin/sh`).

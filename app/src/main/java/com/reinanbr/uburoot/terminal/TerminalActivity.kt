@@ -27,12 +27,14 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
@@ -77,6 +79,7 @@ import com.termux.terminal.TerminalSessionClient
 import com.termux.view.TerminalView
 import com.termux.view.TerminalViewClient
 import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
 /** Terminal tabs on top of [SessionManager]'s sessions, plus the extra keys. */
 class TerminalActivity : ComponentActivity() {
@@ -224,9 +227,21 @@ class TerminalActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(ExperimentalLayoutApi::class)
     @Composable
     private fun TabBar(state: SessionManager.State, wakeLock: Boolean, fg: Color, bg: Color) {
         var menu by remember { mutableStateOf(false) }
+        // The menu takes the focus, which hides the keyboard; the window then resizes and
+        // the open popup jumped 120 px (S9), under a finger already on its way to an item.
+        // So the keyboard goes down first and the menu opens at its final position.
+        val imeVisible = WindowInsets.isImeVisible
+        var menuPending by remember { mutableStateOf(false) }
+        LaunchedEffect(menuPending, imeVisible) {
+            if (!menuPending) return@LaunchedEffect
+            if (imeVisible) delay(1500) // fallback: never leave the button dead
+            menuPending = false
+            menu = true
+        }
         var confirmStop by remember { mutableStateOf(false) }
         Row(Modifier.fillMaxWidth().height(40.dp).background(bg), verticalAlignment = Alignment.CenterVertically) {
             Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()).fillMaxHeight()) {
@@ -256,7 +271,15 @@ class TerminalActivity : ComponentActivity() {
             }
             BarButton("+", fg, stringResource(R.string.action_new_session)) { newSession() }
             Box {
-                BarButton("⋮", fg, stringResource(R.string.action_menu)) { menu = true }
+                BarButton("⋮", fg, stringResource(R.string.action_menu)) {
+                    if (imeVisible) {
+                        getSystemService(InputMethodManager::class.java)
+                            .hideSoftInputFromWindow(terminalView.windowToken, 0)
+                        menuPending = true
+                    } else {
+                        menu = true
+                    }
+                }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     @Composable
                     fun Item(label: Int, enabled: Boolean = true, action: () -> Unit) = DropdownMenuItem(
@@ -269,9 +292,8 @@ class TerminalActivity : ComponentActivity() {
                     )
                     Item(R.string.action_new_session) { newSession() }
                     Item(R.string.action_new_root_session) { newSession("root") }
-                    // Always there (disabled without a session): the session can appear
-                    // while the menu is open, and inserting the item then moved every
-                    // item below it under the user's finger.
+                    // Always there (disabled without a session), so the items below it
+                    // keep their place.
                     Item(R.string.action_close_session, enabled = current != null) { current?.let { close(it) } }
                     HorizontalDivider()
                     for (t in TerminalTheme.entries) {

@@ -29,7 +29,7 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 | 0 | Gap analysis (`docs/NETHUNTER_PARITY.md`) | done |
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (released in 0.3.0) |
 | 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
-| 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). CI release APK of `a7e5b2d` on the S9: preflight → terminal; Settings → Kernel access: the warning appears only when turning it on, Cancel keeps 0, Save writes `KERNEL_ACCESS='0'` with the "applies after Repair mounts" notice. **Not tested in the UI:** turning it back on through *Entendi, ativar* + Save, the Kernel screen (the owner was using the phone) |
+| 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). CI release APK of `a7e5b2d` on the S9: preflight → terminal; Settings → Kernel access: the warning appears only when turning it on, Cancel keeps 0, Save writes `KERNEL_ACCESS='0'` with the "applies after Repair mounts" notice. on again through the warning + Save + *Repair mounts* (8 kernel binds); Kernel screen: state, developer mode (kptr 2→1, recorded), SELinux switch with its dialog (Permissive), *Revert changes* with its dialog (Enforcing, kptr 2, 0 changes), `dmesg -w` root tab (closing it left no process) |
 | 3 | Full hardware access (`HARDWARE_ACCESS`) | next |
 
 ## Core principle: system logic lives in shell scripts
@@ -399,6 +399,10 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
     (seen: the prop went from empty to `0`); `simpleperf stat`, trace-cmd and bpftool
     don't touch it. Once during testing it read 0 with the property unset; the cause
     was not found.
+  - **`simpleperf` leaves `security.perf_harden=0`** (seen after the tests:
+    `perf_event_paranoid` -1, `sys.init.perf_lsm_hooks` empty; init.rc:1228 would write
+    1, so something else wrote -1, not found). `setprop security.perf_harden 1` brought
+    back 3. Documented in `docs/KERNEL.md`; not recorded by kernel.sh (a property).
   - Modules: `MODULE_SIG_FORCE=y`, so an unsigned `.ko` fails with "Required key not
     available" and `uburoot-kmod` explains it. The ROM has no module directories.
   - bpftool fails on 4.9 ("can't get next program": ID iteration and

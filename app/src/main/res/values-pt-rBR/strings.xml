@@ -192,4 +192,5 @@
     <string name="kernel_dmesg">Log do kernel (dmesg -w)</string>
     <string name="kernel_lastlog">Log do kernel da inicialização anterior</string>
     <string name="kernel_report">Relatório de recursos do kernel</string>
+    <string name="kernel_change_was">antes</string>
 </resources>

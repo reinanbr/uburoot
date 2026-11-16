@@ -194,4 +194,5 @@
     <string name="kernel_dmesg">Kernel log (dmesg -w)</string>
     <string name="kernel_lastlog">Previous boot\'s kernel log</string>
     <string name="kernel_report">Kernel capability report</string>
+    <string name="kernel_change_was">was</string>
 </resources>

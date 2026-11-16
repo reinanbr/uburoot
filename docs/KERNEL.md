@@ -119,6 +119,11 @@ Android service that refuses it. It is always temporary.
   which hides addresses from everyone, root included, as 4 did. Android's init also
   writes it: `security.lower_kptr_restrict=1` sets 0, and `=0` sets 2
   (`/system/etc/init/hw/init.rc`). `simpleperf record` does this while it runs.
+- **Android's `simpleperf` relaxes perf for the whole phone and leaves it so.** After it
+  ran as root, `security.perf_harden` stayed 0 and `perf_event_paranoid` read -1 (boot:
+  1 and 3). That is a property, not something `uburoot-kernel` records. Undo it with
+  `sudo android setprop security.perf_harden 1` (init then writes 3), or reboot.
+  Ubuntu's own `perf` doesn't touch it.
 - cgroup v1 controllers are at `/dev/*` as on Android, not at `/sys/fs/cgroup/<name>`.
 
 ## Root manager extensions

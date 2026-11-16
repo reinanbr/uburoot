@@ -115,9 +115,10 @@ class KernelActivity : ComponentActivity() {
             HorizontalDivider()
             Text(stringResource(R.string.kernel_changes, s.changes.size), style = MaterialTheme.typography.titleMedium)
             if (s.changes.isNotEmpty()) {
+                val was = stringResource(R.string.kernel_change_was)
                 Mono(
                     s.changes.joinToString("\n") { c ->
-                        if (c.type == "module") "module ${c.name}" else "${c.type} ${c.name} (was ${c.original})"
+                        if (c.type == "module") "module ${c.name}" else "${c.type} ${c.name} ($was ${c.original})"
                     },
                 )
             }

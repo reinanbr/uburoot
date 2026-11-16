@@ -339,6 +339,11 @@ class TerminalActivity : ComponentActivity() {
      * onKeyDown(), which drops the text selection before asking its client.
      */
     private fun onShortcut(event: KeyEvent): Boolean {
+        // A hardware keyboard sends Ctrl and Shift as key events of their own, and
+        // TerminalView.onKeyDown ends the text selection on ANY key: Ctrl+Shift+C
+        // then found nothing to copy. Keep modifier-only events away from it while
+        // selecting (C still carries them in its meta state).
+        if (terminalView.isSelectingText && KeyEvent.isModifierKey(event.keyCode)) return true
         if (event.action == KeyEvent.ACTION_DOWN && event.isCtrlPressed && event.isShiftPressed) {
             when (event.keyCode) {
                 KeyEvent.KEYCODE_C -> {

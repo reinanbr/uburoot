@@ -235,7 +235,11 @@ check "redacted: marked as such" grep -q '^redacted: *yes' /tmp/doctor-r.txt
 # Same keys in the same order (values differ: that's the point).
 cut -c1-25 /tmp/doctor.txt >/tmp/doctor.keys
 cut -c1-25 /tmp/doctor-r.txt >/tmp/doctor-r.keys
-if cmp -s /tmp/doctor.keys /tmp/doctor-r.keys; then ok "redacted: same report shape"; else bad "redacted: same report shape"; diff /tmp/doctor.keys /tmp/doctor-r.keys | head -20; fi
+if cmp -s /tmp/doctor.keys /tmp/doctor-r.keys; then ok "redacted: same report shape"; else
+    bad "redacted: same report shape"
+    diff /tmp/doctor.keys /tmp/doctor-r.keys | head -20
+    grep -H 'FAIL\]' /tmp/doctor.txt /tmp/doctor-r.txt
+fi
 setpriv --bounding-set -sys_module /system/bin/sh $B/doctor.sh >/tmp/doctor-x.txt 2>&1
 check "doctor: restricted root reported as FAIL" grep -q '^full root: *\[FAIL\]' /tmp/doctor-x.txt
 rm -f /data/local/uburoot/uburoot.conf /vendor/lib/modules/fake.ko
@@ -497,6 +501,12 @@ k_list() {
 k_notours() { ! kin -y module unload vendor_wlan 2>/dev/null && grep -q '^vendor_wlan ' $K/modules; }
 k_changes() { kout status | grep -qx "changes=$1"; }
 check "Ubuntu side: access=on" k_access
+check "status | grep -q (SIGPIPE) leaves no lock" test ! -d /data/local/uburoot/state/.lock
+k_stale() {
+    mkdir /data/local/uburoot/state/.lock && echo 999999 >/data/local/uburoot/state/.lock/pid &&
+        kout status | grep -q '^changes=' && [ ! -d /data/local/uburoot/state/.lock ]
+}
+check "a lock left by a dead process is broken" k_stale
 check "devmode on: kptr_restrict 2 -> 1" k_devmode
 check "sysctl write records the original" k_sysctl
 check "a second write keeps the first original" k_sysctl2
@@ -533,6 +543,159 @@ check "changes refused with KERNEL_ACCESS=0" k_off
 $B/mount.sh >/dev/null 2>&1
 check "KERNEL_ACCESS=0 mounts no kernel fs" sh -c "! grep -qE ' $R/(sys/kernel/config|sys/fs/bpf|run/uburoot/state) ' /proc/self/mounts"
 $B/umount.sh >/dev/null 2>&1
+
+section "hardware access (HARDWARE_ACCESS=1)"
+outside >/tmp/hbase.txt
+printf 'HARDWARE_ACCESS=1\n' >/data/local/uburoot/uburoot.conf
+$B/mount.sh >/tmp/hmount.log 2>&1
+check "change log bound with hardware access only" grep -q " $R/run/uburoot/state " /proc/self/mounts
+check "uburoot-hw and changes.sh installed" sh -c "[ -x $R/usr/local/sbin/uburoot-hw ] && [ -f $R/usr/local/lib/uburoot/changes.sh ]"
+check "Ubuntu-side tools run with Ubuntu's /bin/sh" sh -c "head -n 1 $R/usr/local/sbin/uburoot-hw | grep -qx '#!/bin/sh'"
+check "access file: kernel 0, hardware 1" sh -c "grep -qx KERNEL_ACCESS=0 $R/run/uburoot/access && grep -qx HARDWARE_ACCESS=1 $R/run/uburoot/access"
+check "no kernel filesystems with KERNEL_ACCESS=0" sh -c "! grep -qE ' $R/(sys/kernel/config|sys/fs/bpf) ' /proc/self/mounts"
+check "uburoot-kernel refuses changes (kernel access off)" sh -c "! chroot $R env UBU_SYSCTL_DIR=/tmp/k/sys UBU_BOOT_ID_FILE=/tmp/k/boot_id /usr/local/sbin/uburoot-kernel -y devmode on 2>/dev/null"
+# A fake device tree: never the container's real /dev or /sys.
+H=$R/tmp/hw
+rm -rf $H
+# The same path on both sides, as /dev and /sys are on a phone.
+ln -sfn $H /tmp/hw
+mkdir -p $H/dev $H/sys/devices/system/cpu/cpufreq/policy0 $H/sys/devices/system/cpu/cpu1 $H/sys/class/leds/test \
+    $H/sys/class/ieee80211/phy0 $H/sys/bus/i2c/devices/1-0066 $H/sys/bus/i2c/devices/2-0020 $H/power $H/wifi
+mknod $H/dev/ttyACM0 c 1 3 && chmod 600 $H/dev/ttyACM0
+mknod $H/dev/i2c-1 c 1 3 && chmod 600 $H/dev/i2c-1
+mknod $H/dev/i2c-2 c 1 3 && chmod 600 $H/dev/i2c-2
+echo max77705-charger >$H/sys/bus/i2c/devices/1-0066/name
+echo touchscreen >$H/sys/bus/i2c/devices/2-0020/name
+P=$H/sys/devices/system/cpu/cpufreq/policy0
+echo 0-3 >$P/related_cpus; echo schedutil >$P/scaling_governor; echo 300000 >$P/scaling_min_freq
+echo 1800000 >$P/scaling_max_freq; echo 300000 >$P/cpuinfo_min_freq; echo 1800000 >$P/cpuinfo_max_freq
+echo "performance powersave schedutil" >$P/scaling_available_governors
+echo "300000 1000000 1800000" >$P/scaling_available_frequencies
+echo 1 >$H/sys/devices/system/cpu/cpu1/online
+echo 0-3 >$H/sys/devices/system/cpu/online
+echo 0 >$H/sys/class/leds/test/brightness
+: >$H/power/wake_lock; : >$H/power/wake_unlock
+echo 1 >$H/wifi/enabled; echo 1 >$H/wifi/scan
+cat >$H/acmd <<'EOF2'
+#!/bin/sh
+# Fake Android tools: cmd wifi, settings (state in $UBU_FAKE_WIFI).
+W=$UBU_FAKE_WIFI
+case "$*" in
+    "cmd wifi status") if [ "$(cat $W/enabled)" = 1 ]; then echo "Wifi is enabled"; else echo "Wifi is disabled"; fi ;;
+    "settings get global wifi_scan_always_enabled") cat $W/scan ;;
+    "cmd wifi set-wifi-enabled enabled") echo 1 >$W/enabled ;;
+    "cmd wifi set-wifi-enabled disabled") echo 0 >$W/enabled ;;
+    "cmd wifi set-scan-always-available enabled") echo 1 >$W/scan ;;
+    "cmd wifi set-scan-always-available disabled") echo 0 >$W/scan ;;
+    *) echo "fake acmd: $*" >&2; exit 1 ;;
+esac
+EOF2
+chmod 755 $H/acmd
+echo boot-3 >$K/boot_id
+hin() { # uburoot-hw inside Ubuntu
+    chroot $R env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi \
+        UBU_BOOT_ID_FILE=/tmp/k/boot_id /usr/local/sbin/uburoot-hw "$@"
+}
+hout() { # hardware.sh on the Android side
+    env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi \
+        UBU_BOOT_ID_FILE=$K/boot_id /system/bin/sh $B/hardware.sh "$@"
+}
+kout2() { # Stop all's revert, with the fakes the hardware records need
+    env UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi UBU_BOOT_ID_FILE=$K/boot_id \
+        UBU_SYSCTL_DIR=$K/sys UBU_SELINUX_ENFORCE=$K/enforce UBU_PROC_MODULES=$K/modules UBU_RMMOD=$K/rmmod \
+        /system/bin/sh $B/kernel.sh "$@"
+}
+running() { # REGEX: a process whose command line matches ([x] keeps grep itself out)
+    for _p in /proc/[0-9]*; do
+        tr '\0' ' ' <"$_p/cmdline" 2>/dev/null | grep -q "$1" && return 0
+    done
+    return 1
+}
+h_nowatch() { ! running 'uburoot-hw [w]atch'; }
+h_watching() { running 'uburoot-hw [w]atch'; }
+h_status() { hin status | grep -qx access=on && hin status | grep -q '^class=serial|direct|available|1|dialout|'; }
+h_grant() {
+    hin grant serial tester >/dev/null && grep -q '^dialout:.*tester' $R/etc/group &&
+        [ "$(stat -c '%g %a' $H/dev/ttyACM0)" = "20 660" ] && grep -qx "node /tmp/hw/dev/ttyACM0 0:0:600" $CH
+}
+h_hotplug() {
+    mknod $H/dev/ttyUSB0 c 1 3 && chmod 600 $H/dev/ttyUSB0
+    i=0
+    while [ $i -lt 8 ]; do
+        [ "$(stat -c '%g %a' $H/dev/ttyUSB0)" = "20 660" ] && return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    return 1
+}
+h_usb() { hin grant usb tester >/dev/null && grep -q '^aid_usb:x:1018:.*tester' $R/etc/group; }
+h_badgrant() { ! hin grant wifi tester 2>/dev/null && ! hin grant usb nosuchuser 2>/dev/null; }
+h_gov() { hin cpu governor policy0 performance >/dev/null && [ "$(cat $P/scaling_governor)" = performance ] && grep -qx "file /tmp/hw/sys/devices/system/cpu/cpufreq/policy0/scaling_governor schedutil" $CH; }
+h_badfreq() { ! hin cpu max policy0 2500000 2>/dev/null && [ "$(cat $P/scaling_max_freq)" = 1800000 ]; }
+h_freq() { hin cpu max policy0 1000000 >/dev/null && [ "$(cat $P/scaling_max_freq)" = 1000000 ]; }
+h_cpu0() { ! hin cpu online 0 0 2>/dev/null; }
+h_offline() { hin cpu online 1 0 >/dev/null && [ "$(cat $H/sys/devices/system/cpu/cpu1/online)" = 0 ]; }
+h_wake() { hin wakelock on >/dev/null && grep -qx uburoot_hw $H/power/wake_lock && grep -qx 'wakelock uburoot_hw -' $CH; }
+h_led() { hin set /sys/class/leds/test/brightness 5 >/dev/null && [ "$(cat $H/sys/class/leds/test/brightness)" = 5 ]; }
+h_ledbad() { ! hin set /sys/class/power_supply/battery/batt_tune_float_voltage 4400 2>/dev/null; }
+h_pmic() { ! hin -y allow /dev/i2c-1 2>/dev/null && [ "$(stat -c %a $H/dev/i2c-1)" = 600 ]; }
+h_bus() { hin -y allow /dev/i2c-2 >/dev/null && [ "$(stat -c %a $H/dev/i2c-2)" = 660 ] && grep -q '^uburoot-bus:' $R/etc/group; }
+h_take() {
+    hin -y takeover wifi >/dev/null && [ "$(cat $H/wifi/enabled)$(cat $H/wifi/scan)" = 00 ] && grep -qx 'takeover wifi 1:1' $CH
+}
+h_release() {
+    # A stand-in whose executable is Ubuntu's /usr/sbin/wpa_supplicant (dash ignores argv0).
+    cp $R/usr/bin/dash $R/usr/sbin/wpa_supplicant
+    chroot $R /usr/sbin/wpa_supplicant -c 'while :; do sleep 1; done' </dev/null >/dev/null 2>&1 &
+    sleep 1
+    running 'wpa_supplicant [-]c' || return 1
+    hin release wifi >/dev/null && sleep 1 && [ "$(cat $H/wifi/enabled)$(cat $H/wifi/scan)" = 11 ] &&
+        ! grep -q '^takeover' $CH && ! running 'wpa_supplicant [-]c'
+}
+check "uburoot-hw status (Ubuntu side)" h_status
+check "grant serial: group dialout, existing node 0660, original recorded" h_grant
+check "a new serial device gets the rule (watcher)" h_hotplug
+check "grant usb: group aid_usb (gid 1018)" h_usb
+check "grant refuses a class without a group and an unknown user" h_badgrant
+check "cpu governor recorded" h_gov
+check "cpu max outside the frequency table refused" h_badfreq
+check "cpu max from the table" h_freq
+check "cpu0 can't go offline" h_cpu0
+check "cpu1 offline recorded" h_offline
+check "wake lock recorded" h_wake
+check "LED brightness recorded" h_led
+check "only LED files can be set (no battery/charger knobs)" h_ledbad
+check "a PMIC/charger bus node is refused" h_pmic
+check "a bus node opened to uburoot-bus" h_bus
+check "takeover wifi: Android Wi-Fi and scanning off, recorded" h_take
+check "release wifi: restored, Ubuntu's wpa_supplicant stopped" h_release
+hin -y takeover wifi >/dev/null 2>&1
+check "the rule watcher runs inside Ubuntu" h_watching
+h_seen() { hout status | grep -q '^changes=[1-9]'; }
+h_taken() { hout status | grep -q '^class=wifi|takeover|taken|'; }
+check "Android side sees the hardware changes" h_seen
+check "Android side: wifi taken" h_taken
+# Stop all: umount --kill (stops the watcher too), then revert.
+$B/umount.sh --kill >/dev/null 2>&1
+check "watcher stopped by umount" h_nowatch
+kout2 -y revert >/tmp/hrevert.log 2>&1
+check "Stop all: revert" grep -q 'reverted: takeover wifi' /tmp/hrevert.log
+h_reverted() {
+    [ "$(stat -c '%u:%g %a' $H/dev/ttyACM0)" = "0:0 600" ] && [ "$(stat -c '%u:%g %a' $H/dev/ttyUSB0)" = "0:0 600" ] &&
+        [ "$(stat -c %a $H/dev/i2c-2)" = 600 ] && [ "$(cat $P/scaling_governor)" = schedutil ] &&
+        [ "$(cat $P/scaling_max_freq)" = 1800000 ] && [ "$(cat $H/sys/devices/system/cpu/cpu1/online)" = 1 ] &&
+        grep -qx uburoot_hw $H/power/wake_unlock && [ "$(cat $H/sys/class/leds/test/brightness)" = 0 ] &&
+        [ "$(cat $H/wifi/enabled)$(cat $H/wifi/scan)" = 11 ]
+}
+check "reverted: nodes, CPU, wake lock, LED, Wi-Fi" h_reverted
+check "change log empty" k_changes 0
+check "nothing left under rootfs" test "$(mounted_under $R)" = 0
+outside >/tmp/hafter.txt
+check "container mount table identical" cmp -s /tmp/hbase.txt /tmp/hafter.txt
+rm -f /data/local/uburoot/uburoot.conf
+h_off() { ! hout -y cpu governor policy0 performance 2>/dev/null && [ "$(cat $P/scaling_governor)" = schedutil ]; }
+check "changes refused with HARDWARE_ACCESS=0" h_off
+rm -f $R/usr/sbin/wpa_supplicant $R/etc/uburoot/hw-rules /tmp/hw
 
 section "uburoot-kbuild (fake kernel tree)"
 mkdir -p /tmp/ksrc

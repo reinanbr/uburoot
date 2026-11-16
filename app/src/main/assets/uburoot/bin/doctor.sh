@@ -431,6 +431,7 @@ report() {
     kv DEFAULT_USER "$(ident "$DEFAULT_USER")"
     kv APT_MIRROR "${APT_MIRROR:-default}"
     kv KERNEL_ACCESS "$KERNEL_ACCESS"
+    kv HARDWARE_ACCESS "$HARDWARE_ACCESS"
     _kc=$("$UBU_SH" "$UBU_BIN_DIR/kernel.sh" status 2>/dev/null | bb awk -F= '$1 == "changes" { print $2 }')
     kv "kernel changes" "${_kc:-0} recorded (reverted by Stop all)"
     kv BOOT_START "$BOOT_START"

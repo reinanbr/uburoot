@@ -39,24 +39,19 @@ else
     MODE=ubuntu
     bb() { "$@"; }
     STATE=${UBU_STATE:-/run/uburoot/state}
-    # Kernel access is on when mount.sh bound the change log into the chroot.
-    ACCESS=0
-    awk -v p="$STATE" '$2 == p { f = 1 } END { exit !f }' /proc/self/mounts 2>/dev/null && ACCESS=1
 fi
-# Test-only overrides (never set by the app).
-SYSCTL=${UBU_SYSCTL_DIR:-/proc/sys}
-ENFORCE=${UBU_SELINUX_ENFORCE:-/sys/fs/selinux/enforce}
-PROCMOD=${UBU_PROC_MODULES:-/proc/modules}
-BOOTID_FILE=${UBU_BOOT_ID_FILE:-/proc/sys/kernel/random/boot_id}
-INSMOD=${UBU_INSMOD:-insmod}
-RMMOD=${UBU_RMMOD:-rmmod}
-MODPROBE=${UBU_MODPROBE:-modprobe}
-
-CHANGES="$STATE/changes"
-LOCK="$STATE/.lock"
-
 die() { printf 'uburoot-kernel: %s\n' "$*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
+_lib="$_self/changes.sh"
+[ -f "$_lib" ] || _lib=/usr/local/lib/uburoot/changes.sh
+[ -f "$_lib" ] || die "missing $_lib"
+# shellcheck source=changes.sh
+. "$_lib"
+# Inside Ubuntu, mount.sh writes what was granted to /run/uburoot/access.
+[ "$MODE" = ubuntu ] && ACCESS=$(ubuntu_access KERNEL_ACCESS)
+# Test-only overrides (never set by the app).
+INSMOD=${UBU_INSMOD:-insmod}
+MODPROBE=${UBU_MODPROBE:-modprobe}
 
 YES=0
 if [ "${1:-}" = -y ]; then
@@ -84,40 +79,6 @@ need_access() {
         die "kernel access is off. Turn on Settings > Kernel access in the app, then Repair mounts."
     fi
     die "kernel access is off (KERNEL_ACCESS=0 in uburoot.conf)"
-}
-
-# --- Change log -----------------------------------------------------------------------
-# One line per change: "sysctl NAME ORIGINAL", "selinux - ORIGINAL", "module NAME -".
-# Only the first change of a setting is recorded: that holds the true original.
-unlock() { rmdir "$LOCK" 2>/dev/null; }
-lock() {
-    mkdir -p "$STATE" 2>/dev/null
-    [ "$MODE" = android ] && chmod 700 "$STATE" 2>/dev/null
-    _i=0
-    until mkdir "$LOCK" 2>/dev/null; do
-        _i=$((_i + 1))
-        [ "$_i" -lt 20 ] || die "change log is locked ($LOCK)"
-        sleep 1
-    done
-    trap unlock EXIT
-    trap 'exit 1' INT TERM HUP
-    # A log from an earlier boot describes changes the reboot already undid.
-    _now=$(cat "$BOOTID_FILE" 2>/dev/null)
-    if [ "$(cat "$STATE/boot_id" 2>/dev/null)" != "$_now" ]; then
-        rm -f "$CHANGES"
-        printf '%s\n' "$_now" >"$STATE/boot_id"
-    fi
-    [ -f "$CHANGES" ] || : >"$CHANGES"
-}
-rec_get() { # TYPE NAME -> recorded original (exit 1 if none)
-    bb awk -v t="$1" -v n="$2" '$1 == t && $2 == n { print substr($0, length($1 $2) + 3); f = 1; exit } END { exit !f }' "$CHANGES" 2>/dev/null
-}
-rec_add() { # TYPE NAME VALUE (only the first time)
-    rec_get "$1" "$2" >/dev/null && return 0
-    printf '%s %s %s\n' "$1" "$2" "$3" >>"$CHANGES"
-}
-rec_del() { # TYPE NAME
-    bb awk -v t="$1" -v n="$2" '!($1 == t && $2 == n)' "$CHANGES" >"$CHANGES.tmp" && mv -f "$CHANGES.tmp" "$CHANGES"
 }
 
 # --- sysctl -------------------------------------------------------------------------------
@@ -176,7 +137,6 @@ selinux_set() { # 0|1
 }
 
 # --- Modules ------------------------------------------------------------------------------
-loaded() { bb awk '{ print $1 }' "$PROCMOD" 2>/dev/null; }
 explain_load_error() { # stderr text
     case "$1" in
         *"Key was rejected"* | *"Required key not available"* | *"key"*"rejected"*)
@@ -231,64 +191,6 @@ module_unload() { # NAME [--force]
     say "unloaded $1"
 }
 
-# --- Revert -------------------------------------------------------------------------------
-revert() {
-    _left=""
-    _done=0
-    _lines=$(bb awk '{ l[NR] = $0 } END { for (i = NR; i > 0; i--) print l[i] }' "$CHANGES")
-    _ifs=$IFS
-    IFS='
-'
-    for _l in $_lines; do
-        IFS=$_ifs
-        _t=${_l%% *}
-        _r=${_l#* }
-        _n=${_r%% *}
-        _v=${_r#* }
-        _ok=1
-        case "$_t" in
-            module)
-                if loaded | bb grep -qx "$_n"; then
-                    "$RMMOD" "$_n" 2>/dev/null || { say "could not unload $_n (in use?)" >&2; _ok=0; }
-                fi
-                ;;
-            sysctl)
-                _f="$SYSCTL/$(printf '%s' "$_n" | tr '.' '/')"
-                if printf '%s\n' "$_v" >"$_f" 2>/dev/null; then
-                    :
-                elif [ "$_n" = kernel.kptr_restrict ] && [ "$_v" -gt 2 ] 2>/dev/null &&
-                    printf '2\n' >"$_f" 2>/dev/null; then
-                    # Some kernels boot with a value above 2 (the S9: 4) that a write
-                    # can't set again (0-2 only); the kernel treats >= 2 alike: hidden.
-                    say "kernel.kptr_restrict: $_v can't be written back; set 2 (same effect)"
-                else
-                    say "could not restore $_n = $_v" >&2
-                    _ok=0
-                fi
-                ;;
-            selinux)
-                printf '%s' "$_v" >"$ENFORCE" 2>/dev/null || { say "could not restore SELinux" >&2; _ok=0; }
-                ;;
-            *) ;;
-        esac
-        if [ "$_ok" = 1 ]; then
-            _done=$((_done + 1))
-            say "reverted: $_t $_n"
-        else
-            _left="$_l
-$_left"
-        fi
-    done
-    IFS=$_ifs
-    printf '%s' "$_left" | bb awk 'NF' >"$CHANGES"
-    if [ -s "$CHANGES" ]; then
-        say "$(bb wc -l <"$CHANGES" | tr -d ' ') change(s) could not be reverted" >&2
-        return 1
-    fi
-    [ "$_done" -gt 0 ] || say "nothing to revert"
-    return 0
-}
-
 status() {
     say "mode=$MODE"
     if [ "$ACCESS" = 1 ]; then say "access=on"; else say "access=off"; fi
@@ -302,7 +204,7 @@ status() {
     while read -r _t _n _v; do
         [ -n "$_t" ] && say "change=$_t $_n $_v"
     done <"$CHANGES"
-    say "changes=$(bb awk 'NF' "$CHANGES" | bb wc -l | tr -d ' ')"
+    say "changes=$(rec_count)"
 }
 
 [ $# -ge 1 ] || die "usage: uburoot-kernel [-y] status|sysctl|devmode|selinux|module|lastlog|revert ..."

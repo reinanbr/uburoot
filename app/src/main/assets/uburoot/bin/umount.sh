@@ -22,6 +22,13 @@ done
 
 R=$ROOTFS
 
+# uburoot-hw's rule watcher runs inside the chroot by itself: stop it even
+# without --kill, or it would keep the rootfs busy.
+_w=$(cat "$R/run/uburoot/hw-watch.pid" 2>/dev/null)
+if [ -n "$_w" ] && [ "$(readlink "/proc/$_w/root" 2>/dev/null)" = "$R" ]; then
+    kill "$_w" 2>/dev/null
+fi
+
 if [ "$KILL" = 1 ]; then
     _pids=$(ubu_chroot_pids)
     if [ -n "$_pids" ]; then

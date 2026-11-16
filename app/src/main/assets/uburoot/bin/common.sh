@@ -73,6 +73,7 @@ ubu_load_config() {
     BOOT_SCRIPT_TIMEOUT=60
     APT_MIRROR=""
     KERNEL_ACCESS=0
+    HARDWARE_ACCESS=0
     if [ -f "$UBU_CONFIG" ]; then
         # shellcheck source=/dev/null
         . "$UBU_CONFIG"

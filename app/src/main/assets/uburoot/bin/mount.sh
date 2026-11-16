@@ -115,23 +115,43 @@ if [ "$KERNEL_ACCESS" = 1 ]; then
         fi
     fi
 
-    # The change log, shared with the host-side kernel.sh (Stop all reverts it).
-    mkdir -p "$UBU_STATE" && chmod 700 "$UBU_STATE"
-    ubu_bind bind "$UBU_STATE" "$R/run/uburoot/state" || ubu_warn "bind $UBU_STATE failed"
-    chmod 700 "$R/run/uburoot" 2>/dev/null
-    # Ubuntu-side tools.
-    if mkdir -p "$R/usr/local/sbin"; then
-        for _t in kernel.sh:uburoot-kernel kbuild.sh:uburoot-kbuild; do
-            _d="$R/usr/local/sbin/${_t#*:}"
-            if ! { cp -f "$UBU_BIN_DIR/${_t%%:*}" "$_d.tmp" && chown 0:0 "$_d.tmp" &&
-                chmod 755 "$_d.tmp" && mv -f "$_d.tmp" "$_d"; }; then
-                ubu_warn "cannot install ${_t#*:}"
-            fi
-        done
-        ln -sf uburoot-kernel "$R/usr/local/sbin/uburoot-kmod"
-    fi
-elif ubu_is_mounted "$R/run/uburoot/state"; then
+elif ubu_is_mounted "$R/sys/kernel/config" || ubu_is_mounted "$R/sys/kernel/tracing"; then
     ubu_log "KERNEL_ACCESS=0 but the kernel interfaces are still mounted (use 'Reparar mounts')"
+fi
+
+# 1c) The change log and the Ubuntu-side tools [KERNEL_ACCESS / HARDWARE_ACCESS].
+#     uburoot-kernel and uburoot-hw record every change in $UBU_STATE, shared
+#     with the host side, so Stop all (kernel.sh -y revert) undoes them.
+ubu_install_tool() { # SOURCE DEST MODE
+    # Ubuntu's own /bin/sh: /system/bin/sh is there only with ANDROID_INTEGRATION.
+    bb sed '1s|^#!/system/bin/sh$|#!/bin/sh|' "$UBU_BIN_DIR/$1" >"$2.tmp" &&
+        chown 0:0 "$2.tmp" && chmod "$3" "$2.tmp" && mv -f "$2.tmp" "$2"
+}
+mkdir -p "$R/run/uburoot" && chmod 700 "$R/run/uburoot"
+printf 'KERNEL_ACCESS=%s\nHARDWARE_ACCESS=%s\n' "$KERNEL_ACCESS" "$HARDWARE_ACCESS" >"$R/run/uburoot/access"
+if [ "$KERNEL_ACCESS" = 1 ] || [ "$HARDWARE_ACCESS" = 1 ]; then
+    mkdir -p "$UBU_STATE" && chmod 700 "$UBU_STATE"
+    if ! ubu_is_mounted "$R/run/uburoot/state"; then
+        mkdir -p "$R/run/uburoot/state"
+        ubu_bind bind "$UBU_STATE" "$R/run/uburoot/state" || ubu_warn "bind $UBU_STATE failed"
+    fi
+    if mkdir -p "$R/usr/local/sbin" "$R/usr/local/lib/uburoot"; then
+        ubu_install_tool changes.sh "$R/usr/local/lib/uburoot/changes.sh" 644 || ubu_warn "cannot install changes.sh"
+        if [ "$KERNEL_ACCESS" = 1 ]; then
+            ubu_install_tool kernel.sh "$R/usr/local/sbin/uburoot-kernel" 755 || ubu_warn "cannot install uburoot-kernel"
+            ubu_install_tool kbuild.sh "$R/usr/local/sbin/uburoot-kbuild" 755 || ubu_warn "cannot install uburoot-kbuild"
+            ln -sf uburoot-kernel "$R/usr/local/sbin/uburoot-kmod"
+        fi
+        if [ "$HARDWARE_ACCESS" = 1 ]; then
+            ubu_install_tool hardware.sh "$R/usr/local/sbin/uburoot-hw" 755 || ubu_warn "cannot install uburoot-hw"
+        fi
+    fi
+    # Permission rules for hotplugged devices (serial, hidraw) granted earlier.
+    if [ "$HARDWARE_ACCESS" = 1 ] && [ -s "$R/etc/uburoot/hw-rules" ]; then
+        "$UBU_SH" "$UBU_BIN_DIR/hardware.sh" apply >/dev/null 2>&1
+        bb chroot "$R" /usr/bin/env -i PATH=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+            /usr/local/sbin/uburoot-hw watch </dev/null >/dev/null 2>&1 &
+    fi
 fi
 
 # The kernel hostname is shared with Android and must not be changed; make it

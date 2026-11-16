@@ -1,0 +1,1 @@
+Ctrl+Shift+C on a hardware keyboard now copies the selected text (it used to end the selection without copying). Two builds of the same commit are now byte-identical.

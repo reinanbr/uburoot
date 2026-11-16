@@ -300,8 +300,9 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   "UbuRoot by reinanbr", app reinstalled by `customize.sh`, module dir = `module.prop` +
   `service.sh`. With `SKIPUNZIP=1`, Magisk does NOT copy `module.prop` itself
   (`install_module` in util_functions.sh), so `customize.sh` must extract it.
-  The test module was removed afterwards. Recovery flashing has not been tested yet
-  (needs a reboot into TWRP).
+  The test module was removed afterwards. Recovery flashing has not been tested: the
+  S9 has TWRP (Omni-based `starqltechn` build, 2022), but on 2026-11-16 the user chose
+  to skip it, since installing through Magisk already works.
 - Managers' file pickers may not list `*.apk` (not confirmed in source). Publish the
   same bytes also as `.zip`, or tell users to rename. Magisk's own docs do this for
   its APK.

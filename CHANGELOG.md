@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-16
+
 ### Changed
 
 - The APK no longer carries AGP's encrypted dependency-metadata block, so two builds of
@@ -99,6 +101,7 @@ First release.
 - `iptables` inside Ubuntu now uses the backend that holds Android's rules (legacy on
   current Android) instead of `iptables-nft`.
 
-[Unreleased]: https://github.com/reinanbr/uburoot/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/reinanbr/uburoot/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/reinanbr/uburoot/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/reinanbr/uburoot/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/reinanbr/uburoot/releases/tag/v0.1.0

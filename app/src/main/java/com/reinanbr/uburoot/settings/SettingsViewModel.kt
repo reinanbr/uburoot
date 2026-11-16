@@ -15,7 +15,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-enum class Notice { SAVED, REPAIRED, REPAIR_FAILED, RESET_REFUSED, RESET_FAILED }
+enum class Notice { SAVED, REPAIRED, REPAIR_FAILED, RESET_REFUSED, RESET_FAILED, BOOT_RAN, BOOT_FAILED }
+
+/** State of the UbuRoot root module, from `boot.sh --status`. */
+enum class ModuleState { ENABLED, DISABLED, REMOVING, PENDING, MISSING, UNKNOWN }
 
 data class SettingsState(
     val loading: Boolean = true,
@@ -23,6 +26,7 @@ data class SettingsState(
     /** What uburoot.conf holds now. */
     val saved: UbuConfig? = null,
     val users: List<String> = emptyList(),
+    val module: ModuleState = ModuleState.UNKNOWN,
     val busy: Boolean = false,
     val log: List<String> = emptyList(),
     val notice: Notice? = null,
@@ -43,7 +47,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             _state.update {
                 try {
-                    it.copy(loading = false, saved = ConfigStore.read(), users = ConfigStore.users())
+                    it.copy(
+                        loading = false,
+                        saved = ConfigStore.read(),
+                        users = ConfigStore.users(),
+                        module = moduleState(),
+                    )
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -94,6 +103,18 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 Notice.RESET_FAILED
             }
         }
+    }
+
+    /** Runs boot.sh --now: mounts and starts the scripts in /etc/uburoot-boot.d (e.g. after Stop all). */
+    fun runBootNow() = work {
+        val code = RootShell.stream("${UbuPaths.script("boot.sh")} --now", ::log)
+        if (code == 0) Notice.BOOT_RAN else Notice.BOOT_FAILED
+    }
+
+    private suspend fun moduleState(): ModuleState {
+        val r = RootShell.run("${UbuPaths.script("boot.sh")} --status")
+        val value = r.out.firstOrNull { it.startsWith("module=") }?.substringAfter('=')
+        return ModuleState.entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: ModuleState.UNKNOWN
     }
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }

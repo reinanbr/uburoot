@@ -118,4 +118,18 @@
     <string name="share_failed">Não foi possível abrir o arquivo compartilhado no Ubuntu: %1$s</string>
     <string name="share_nothing">nada para abrir</string>
     <string name="share_text_name">texto-compartilhado.txt</string>
+
+    <!-- Fase 5: iniciar no boot -->
+    <string name="settings_boot">Iniciar no boot</string>
+    <string name="settings_boot_start">Iniciar o Ubuntu no boot</string>
+    <string name="settings_boot_hint">Monta o Ubuntu no boot e executa, como root, os scripts executáveis de /etc/uburoot-boot.d dentro dele, em ordem de nome (ex.: 10-sshd que roda /usr/sbin/sshd -p 8022). Os scripts devem iniciar daemons em segundo plano. Log: /data/local/uburoot/boot.log. Precisa do módulo UbuRoot: instale este APK como módulo no Magisk, KernelSU ou APatch.</string>
+    <string name="module_enabled">Módulo UbuRoot: instalado e ativado.</string>
+    <string name="module_disabled">Módulo UbuRoot: desativado no gerenciador de root; nada inicia no boot.</string>
+    <string name="module_removing">Módulo UbuRoot: será removido no próximo reboot.</string>
+    <string name="module_pending">Módulo UbuRoot: instalado, ativo após o próximo reboot.</string>
+    <string name="module_missing">Módulo UbuRoot: não instalado; nada inicia no boot.</string>
+    <string name="module_unknown">Módulo UbuRoot: estado desconhecido.</string>
+    <string name="action_run_boot">Executar scripts de boot agora</string>
+    <string name="notice_boot_ran">Scripts de boot executados.</string>
+    <string name="notice_boot_failed">Um script de boot falhou; veja o log abaixo.</string>
 </resources>

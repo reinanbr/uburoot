@@ -57,7 +57,8 @@ class UbuConfigTest {
             hostname = "h1",
             inotifyMaxWatches = 1000,
             sdcardSource = "/data/media/0",
-            extra = linkedMapOf("FUTURE_KEY" to "a 'b' c"),
+            bootStart = true,
+            extra = linkedMapOf("FUTURE_KEY" to "a 'b' c", "BOOT_SCRIPT_TIMEOUT" to "120"),
         )
         assertEquals(cfg, UbuConfig.parse(cfg.render()))
     }

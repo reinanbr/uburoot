@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reinanbr.uburoot.R
 import com.reinanbr.uburoot.install.UbuConfig
+import com.reinanbr.uburoot.settings.ModuleState
 import com.reinanbr.uburoot.settings.Notice
 import com.reinanbr.uburoot.settings.SettingsState
 import com.reinanbr.uburoot.settings.SettingsViewModel
@@ -142,6 +143,7 @@ class SettingsActivity : ComponentActivity() {
         var sdcard by rememberSaveable(saved) { mutableStateOf(saved.mountSdcard) }
         var android by rememberSaveable(saved) { mutableStateOf(saved.androidIntegration) }
         var dns by rememberSaveable(saved) { mutableStateOf(saved.dnsServers) }
+        var boot by rememberSaveable(saved) { mutableStateOf(saved.bootStart) }
 
         val edited = saved.copy(
             defaultUser = if (user == "root") "" else user,
@@ -149,6 +151,7 @@ class SettingsActivity : ComponentActivity() {
             mountSdcard = sdcard,
             androidIntegration = android,
             dnsServers = dns.trim().replace(Regex("\\s+"), " "),
+            bootStart = boot,
         )
         val dnsOk = UbuConfig.isValidDns(dns)
 
@@ -193,6 +196,24 @@ class SettingsActivity : ComponentActivity() {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),
         )
+
+        Section(R.string.settings_boot)
+        Toggle(R.string.settings_boot_start, boot) { boot = it }
+        Text(stringResource(R.string.settings_boot_hint), style = MaterialTheme.typography.bodySmall)
+        Text(
+            stringResource(moduleText(state.module)),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (state.module == ModuleState.ENABLED) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.error
+            },
+        )
+        OutlinedButton(
+            onClick = vm::runBootNow,
+            enabled = !state.busy,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.action_run_boot)) }
 
         Button(
             onClick = { vm.save(edited) },
@@ -286,11 +307,22 @@ class SettingsActivity : ComponentActivity() {
             Notice.REPAIR_FAILED -> R.string.notice_repair_failed to true
             Notice.RESET_REFUSED -> R.string.notice_reset_refused to true
             Notice.RESET_FAILED -> R.string.notice_reset_failed to true
+            Notice.BOOT_RAN -> R.string.notice_boot_ran to false
+            Notice.BOOT_FAILED -> R.string.notice_boot_failed to true
         }
         Text(
             stringResource(text),
             color = if (error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
         )
+    }
+
+    private fun moduleText(m: ModuleState) = when (m) {
+        ModuleState.ENABLED -> R.string.module_enabled
+        ModuleState.DISABLED -> R.string.module_disabled
+        ModuleState.REMOVING -> R.string.module_removing
+        ModuleState.PENDING -> R.string.module_pending
+        ModuleState.MISSING -> R.string.module_missing
+        ModuleState.UNKNOWN -> R.string.module_unknown
     }
 
     @Composable

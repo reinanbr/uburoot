@@ -14,6 +14,8 @@ data class UbuConfig(
     val inotifyMaxWatches: Int = DEFAULT_INOTIFY,
     /** Optional override of the /sdcard bind source (empty = auto-detect). */
     val sdcardSource: String = "",
+    /** The root module's service.sh runs boot.sh at boot (mount + /etc/uburoot-boot.d). */
+    val bootStart: Boolean = false,
     /** Keys this app version doesn't know (hand edits, newer versions): kept as they are. */
     val extra: Map<String, String> = emptyMap(),
 ) {
@@ -28,6 +30,7 @@ data class UbuConfig(
         line("UBU_HOSTNAME", hostname)
         line("INOTIFY_MAX_WATCHES", inotifyMaxWatches.coerceAtLeast(0).toString())
         if (sdcardSource.isNotEmpty()) line("SDCARD_SOURCE", sdcardSource)
+        line("BOOT_START", if (bootStart) "1" else "0")
         for ((k, v) in extra) if (k !in KNOWN && SHELL_NAME.matches(k)) line(k, v)
     }
 
@@ -51,6 +54,7 @@ data class UbuConfig(
             "UBU_HOSTNAME",
             "INOTIFY_MAX_WATCHES",
             "SDCARD_SOURCE",
+            "BOOT_START",
         )
 
         // Accounts that already exist in Ubuntu Base: setup.sh would reuse
@@ -82,6 +86,7 @@ data class UbuConfig(
                 hostname = map["UBU_HOSTNAME"]?.takeIf { it.isNotBlank() } ?: d.hostname,
                 inotifyMaxWatches = map["INOTIFY_MAX_WATCHES"]?.toIntOrNull() ?: d.inotifyMaxWatches,
                 sdcardSource = map["SDCARD_SOURCE"] ?: d.sdcardSource,
+                bootStart = flag("BOOT_START", d.bootStart),
                 extra = map.filterKeys { it !in KNOWN },
             )
         }

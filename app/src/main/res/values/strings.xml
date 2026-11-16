@@ -120,4 +120,18 @@
     <string name="share_failed">Could not open the shared file in Ubuntu: %1$s</string>
     <string name="share_nothing">nothing to open</string>
     <string name="share_text_name">shared-text.txt</string>
+
+    <!-- Phase 5: start at boot -->
+    <string name="settings_boot">Start at boot</string>
+    <string name="settings_boot_start">Start Ubuntu at boot</string>
+    <string name="settings_boot_hint">Mounts Ubuntu at boot and runs, as root, the executable scripts in /etc/uburoot-boot.d inside it, in name order (e.g. 10-sshd that runs /usr/sbin/sshd -p 8022). Scripts should start daemons in the background. Log: /data/local/uburoot/boot.log. Needs the UbuRoot module: install this APK as a module in Magisk, KernelSU or APatch.</string>
+    <string name="module_enabled">UbuRoot module: installed and enabled.</string>
+    <string name="module_disabled">UbuRoot module: disabled in the root manager; nothing starts at boot.</string>
+    <string name="module_removing">UbuRoot module: will be removed at the next reboot.</string>
+    <string name="module_pending">UbuRoot module: installed, active after the next reboot.</string>
+    <string name="module_missing">UbuRoot module: not installed; nothing starts at boot.</string>
+    <string name="module_unknown">UbuRoot module: state unknown.</string>
+    <string name="action_run_boot">Run boot scripts now</string>
+    <string name="notice_boot_ran">Boot scripts ran.</string>
+    <string name="notice_boot_failed">A boot script failed; see the log below.</string>
 </resources>

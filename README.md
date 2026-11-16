@@ -352,8 +352,10 @@ listed in the [CHANGELOG](CHANGELOG.md).
 
 ## License
 
-[Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for the third-party components
-(Termux `terminal-view`/`terminal-emulator`, libsu).
+[GNU General Public License v3.0 or later](LICENSE) (GPL-3.0-or-later). See
+[NOTICE](NOTICE) for the third-party components (Termux `terminal-view`/`terminal-emulator`
+and libsu, both Apache-2.0, text in [LICENSES/](LICENSES/)). Releases up to and including
+v0.2.1 were published under the Apache License 2.0 and remain available under it.
 
 Ubuntu is a trademark of Canonical Ltd. This project is not affiliated with or endorsed
 by Canonical.

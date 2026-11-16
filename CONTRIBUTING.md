@@ -66,5 +66,7 @@ The device suites are described in the [README](README.md#tests).
 - Update CLAUDE.md when you change a design decision, and CHANGELOG.md under
   *Unreleased*.
 
-By contributing, you agree that your contributions are licensed under the
-[Apache License 2.0](LICENSE).
+UbuRoot is licensed under the [GNU GPL v3.0 or later](LICENSE). Contributions are accepted
+under the same license (inbound = outbound): by opening a pull request you agree that your
+contribution is licensed under GPL-3.0-or-later. There is no CLA. New source files start
+with `SPDX-License-Identifier: GPL-3.0-or-later`.

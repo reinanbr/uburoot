@@ -7,6 +7,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- Relicensed from the Apache License 2.0 to the GNU GPL v3.0 or later. Releases up to and
+  including v0.2.1 remain available under the Apache License 2.0. The third-party
+  libraries (Termux terminal libraries, libsu, AndroidX) keep their Apache-2.0 licenses.
+
 ## [0.2.1] - 2026-11-16
 
 ### Changed

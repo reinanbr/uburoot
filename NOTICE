@@ -1,23 +1,35 @@
 UbuRoot
-Copyright 2026 reinanbr
+Copyright (C) 2026 reinanbr
 
-Licensed under the Apache License, Version 2.0 (see LICENSE).
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version (GPL-3.0-or-later; see LICENSE).
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+Releases up to and including v0.2.1 were published under the Apache License,
+Version 2.0, and remain available under it.
 
 This product includes third-party software:
 
 - Termux terminal-emulator and terminal-view libraries
   https://github.com/termux/termux-app
-  Licensed under the Apache License, Version 2.0. They are based on Jack
-  Palevich's Android Terminal Emulator
+  Licensed under the Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt).
+  They are based on Jack Palevich's Android Terminal Emulator
   (https://github.com/jackpal/Android-Terminal-Emulator), also Apache 2.0.
-  (The rest of termux-app is GPLv3 and is not used by UbuRoot.)
 
 - libsu, by John Wu (topjohnwu)
   https://github.com/topjohnwu/libsu
-  Licensed under the Apache License, Version 2.0.
+  Licensed under the Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt).
 
 - AndroidX, Jetpack Compose and Kotlin coroutines
-  Licensed under the Apache License, Version 2.0.
+  Licensed under the Apache License, Version 2.0 (see LICENSES/Apache-2.0.txt).
+
+The Apache License 2.0 is compatible with GPL version 3: these components keep
+their own license and notices inside this GPL-3.0-or-later work.
 
 Ubuntu is a trademark of Canonical Ltd. This project is not affiliated with
 or endorsed by Canonical. UbuRoot does not include Ubuntu; it downloads the

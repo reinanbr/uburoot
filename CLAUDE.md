@@ -517,7 +517,9 @@ download-artifact v8):
   published files.
 - Repo docs: README (screenshots come from
   `fastlane/metadata/android/en-US/images/phoneScreenshots/`, shared with F-Droid),
-  LICENSE (Apache-2.0, official text), NOTICE, CONTRIBUTING, CODE_OF_CONDUCT (Contributor
+  LICENSE (GPL-3.0-or-later since 0.3.0, the verbatim gnu.org text, SHA-256 `3972dc97…`;
+  0.1.0–0.2.1 were Apache-2.0, whose text is kept in `LICENSES/Apache-2.0.txt` for the
+  third-party libraries), NOTICE, CONTRIBUTING, CODE_OF_CONDUCT (Contributor
   Covenant 2.1, official text; contact = GitHub private reporting, which is enabled),
   SECURITY, CHANGELOG (Keep a Changelog), issue forms, PR template, `.editorconfig`.
 - v0.2.0 (2026-11-16): CI's signed release APK of `1d634d2` was tested on the S9 before

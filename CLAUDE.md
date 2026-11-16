@@ -28,7 +28,7 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 |------:|-------|--------|
 | 0 | Gap analysis (`docs/NETHUNTER_PARITY.md`) | done |
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (ships as 0.3.0) |
-| 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit, Docker 182/182, device 60/60; app on the S9: see below) |
+| 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
 | 2 | Full kernel access (`KERNEL_ACCESS`) | next |
 
 ## Core principle: system logic lives in shell scripts

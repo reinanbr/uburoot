@@ -17,6 +17,8 @@ data class UbuConfig(
     val sdcardSource: String = "",
     /** The root module's service.sh runs boot.sh at boot (mount + /etc/uburoot-boot.d). */
     val bootStart: Boolean = false,
+    /** http:// Ubuntu ports mirror for the release suites (empty = ports.ubuntu.com); setup.sh. */
+    val aptMirror: String = "",
     /** Keys this app version doesn't know (hand edits, newer versions): kept as they are. */
     val extra: Map<String, String> = emptyMap(),
 ) {
@@ -32,6 +34,7 @@ data class UbuConfig(
         line("INOTIFY_MAX_WATCHES", inotifyMaxWatches.coerceAtLeast(0).toString())
         if (sdcardSource.isNotEmpty()) line("SDCARD_SOURCE", sdcardSource)
         line("BOOT_START", if (bootStart) "1" else "0")
+        if (aptMirror.isNotEmpty()) line("APT_MIRROR", aptMirror)
         for ((k, v) in extra) if (k !in KNOWN && SHELL_NAME.matches(k)) line(k, v)
     }
 
@@ -56,6 +59,7 @@ data class UbuConfig(
             "INOTIFY_MAX_WATCHES",
             "SDCARD_SOURCE",
             "BOOT_START",
+            "APT_MIRROR",
         )
 
         // Accounts that already exist in Ubuntu Base: setup.sh would reuse
@@ -73,6 +77,14 @@ data class UbuConfig(
             return list.isNotEmpty() && list.all { DNS_SERVER.matches(it) }
         }
 
+        /**
+         * The same rule as `ubu_valid_mirror` in common.sh: plain http (Ubuntu Base has no
+         * CA certificates before its first apt run), a host, an optional path, a final `/`.
+         */
+        fun isValidMirror(url: String) = MIRROR.matches(url)
+
+        private val MIRROR = Regex("http://[A-Za-z0-9._~:-]+(/[A-Za-z0-9._~:-]+)*/")
+
         /** Reads a file written by [render]; missing keys get the scripts' defaults. */
         fun parse(text: String): UbuConfig {
             val map = ShellAssignments.parse(text)
@@ -88,6 +100,7 @@ data class UbuConfig(
                 inotifyMaxWatches = map["INOTIFY_MAX_WATCHES"]?.toIntOrNull() ?: d.inotifyMaxWatches,
                 sdcardSource = map["SDCARD_SOURCE"] ?: d.sdcardSource,
                 bootStart = flag("BOOT_START", d.bootStart),
+                aptMirror = map["APT_MIRROR"] ?: d.aptMirror,
                 extra = map.filterKeys { it !in KNOWN },
             )
         }

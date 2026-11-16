@@ -40,6 +40,33 @@ class UbuConfigTest {
     }
 
     @Test
+    fun mirrorRulesMatchTheScript() {
+        for (ok in listOf(
+            "http://ports.ubuntu.com/ubuntu-ports/",
+            "http://br.mirror.example:8080/ubuntu-ports/",
+            "http://m.example/",
+        )) {
+            assertTrue(ok, UbuConfig.isValidMirror(ok))
+        }
+        for (bad in listOf(
+            "",
+            "https://ports.ubuntu.com/ubuntu-ports/",
+            "http://ports.ubuntu.com/ubuntu-ports",
+            "http:///x/",
+            "http://a//b/",
+            "http://a b/",
+            "http://a/\$(id)/",
+            "ftp://a/",
+        )) {
+            assertFalse(bad, UbuConfig.isValidMirror(bad))
+        }
+        val cfg = UbuConfig(aptMirror = "http://m.example/ubuntu-ports/")
+        assertTrue(cfg.render().contains("APT_MIRROR='http://m.example/ubuntu-ports/'\n"))
+        assertEquals(cfg, UbuConfig.parse(cfg.render()))
+        assertFalse(UbuConfig().render().contains("APT_MIRROR"))
+    }
+
+    @Test
     fun userNameRules() {
         for (ok in listOf("ana", "_x", "dev-1", "a_b")) assertTrue(ok, UbuConfig.isValidUserName(ok))
         for (bad in listOf("", "Root", "root", "daemon", "_apt", "1abc", "a b", "a;b", "-x", "a".repeat(33))) {

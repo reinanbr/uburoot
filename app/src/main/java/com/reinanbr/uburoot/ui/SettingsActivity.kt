@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -26,6 +28,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +57,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.reinanbr.uburoot.R
 import com.reinanbr.uburoot.install.UbuConfig
+import com.reinanbr.uburoot.settings.DoctorReport
 import com.reinanbr.uburoot.settings.ModuleState
 import com.reinanbr.uburoot.settings.Notice
 import com.reinanbr.uburoot.settings.SettingsState
@@ -122,6 +126,8 @@ class SettingsActivity : ComponentActivity() {
                 else -> ConfigForm(saved, state)
             }
             HorizontalDivider()
+            Diagnostics(state)
+            HorizontalDivider()
             Maintenance(state)
             if (state.busy) CircularProgressIndicator()
             state.notice?.let { NoticeText(it) }
@@ -145,6 +151,7 @@ class SettingsActivity : ComponentActivity() {
         var android by rememberSaveable(saved) { mutableStateOf(saved.androidIntegration) }
         var dns by rememberSaveable(saved) { mutableStateOf(saved.dnsServers) }
         var boot by rememberSaveable(saved) { mutableStateOf(saved.bootStart) }
+        var mirror by rememberSaveable(saved) { mutableStateOf(saved.aptMirror) }
 
         val edited = saved.copy(
             defaultUser = if (user == "root") "" else user,
@@ -153,8 +160,10 @@ class SettingsActivity : ComponentActivity() {
             androidIntegration = android,
             dnsServers = dns.trim().replace(Regex("\\s+"), " "),
             bootStart = boot,
+            aptMirror = mirror.trim(),
         )
         val dnsOk = UbuConfig.isValidDns(dns)
+        val mirrorOk = mirror.isBlank() || UbuConfig.isValidMirror(mirror.trim())
 
         Section(R.string.settings_session)
         Text(stringResource(R.string.settings_default_user), style = MaterialTheme.typography.labelLarge)
@@ -197,6 +206,19 @@ class SettingsActivity : ComponentActivity() {
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
             modifier = Modifier.fillMaxWidth(),
         )
+        OutlinedTextField(
+            value = mirror,
+            onValueChange = { mirror = it },
+            label = { Text(stringResource(R.string.form_mirror)) },
+            placeholder = { Text("http://ports.ubuntu.com/ubuntu-ports/") },
+            supportingText = {
+                Text(stringResource(if (mirrorOk) R.string.settings_mirror_hint else R.string.mirror_invalid))
+            },
+            isError = !mirrorOk,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+            modifier = Modifier.fillMaxWidth(),
+        )
 
         Section(R.string.settings_boot)
         Toggle(R.string.settings_boot_start, boot) { boot = it }
@@ -218,9 +240,66 @@ class SettingsActivity : ComponentActivity() {
 
         Button(
             onClick = { vm.save(edited) },
-            enabled = !state.busy && dnsOk && edited != saved,
+            enabled = !state.busy && dnsOk && mirrorOk && edited != saved,
             modifier = Modifier.fillMaxWidth(),
         ) { Text(stringResource(R.string.action_save)) }
+    }
+
+    /** doctor.sh: shown redacted by default, and shared exactly as shown. */
+    @Composable
+    private fun Diagnostics(state: SettingsState) {
+        var identifiers by rememberSaveable { mutableStateOf(false) }
+        Section(R.string.settings_diagnostics)
+        Text(stringResource(R.string.settings_diagnostics_hint), style = MaterialTheme.typography.bodySmall)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .selectable(selected = identifiers, role = Role.Checkbox, onClick = { identifiers = !identifiers }),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = identifiers, onCheckedChange = null)
+            Text(stringResource(R.string.doctor_identifiers), modifier = Modifier.padding(start = 8.dp))
+        }
+        OutlinedButton(
+            onClick = { vm.runDoctor(redact = !identifiers) },
+            enabled = !state.doctorRunning,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(stringResource(R.string.action_run_doctor)) }
+        if (state.doctorRunning) CircularProgressIndicator()
+        state.doctor?.let { DoctorView(it) }
+    }
+
+    @Composable
+    private fun DoctorView(report: DoctorReport) {
+        if (!report.redacted) {
+            Text(stringResource(R.string.doctor_not_redacted), color = MaterialTheme.colorScheme.error)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { shareDoctor(report.text) }) { Text(stringResource(R.string.action_share)) }
+            OutlinedButton(onClick = {
+                getSystemService(ClipboardManager::class.java)
+                    .setPrimaryClip(ClipData.newPlainText("UbuRoot doctor", report.text))
+            }) { Text(stringResource(R.string.action_copy)) }
+        }
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.small) {
+            Text(
+                report.text,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+            )
+        }
+    }
+
+    private fun shareDoctor(text: String) {
+        val send = Intent(Intent.ACTION_SEND)
+            .setType("text/plain")
+            .putExtra(Intent.EXTRA_SUBJECT, "UbuRoot doctor")
+            .putExtra(Intent.EXTRA_TEXT, text)
+        startActivity(Intent.createChooser(send, getString(R.string.action_share)))
     }
 
     @Composable

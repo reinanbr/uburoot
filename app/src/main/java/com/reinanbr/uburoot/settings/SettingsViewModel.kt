@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.reinanbr.uburoot.install.ConfigStore
 import com.reinanbr.uburoot.install.UbuConfig
 import com.reinanbr.uburoot.root.RootShell
+import com.reinanbr.uburoot.root.Sh
 import com.reinanbr.uburoot.root.UbuPaths
 import com.reinanbr.uburoot.terminal.SessionManager
 import kotlinx.coroutines.CancellationException
@@ -33,7 +34,12 @@ data class SettingsState(
     val notice: Notice? = null,
     /** The rootfs is gone: the screen hands over to the installer. */
     val resetDone: Boolean = false,
+    val doctor: DoctorReport? = null,
+    val doctorRunning: Boolean = false,
 )
+
+/** Output of doctor.sh; [redacted] = identifiers replaced (the default, what gets shared). */
+data class DoctorReport(val text: String, val redacted: Boolean)
 
 class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val _state = MutableStateFlow(SettingsState())
@@ -71,6 +77,10 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         if (before?.dnsServers?.trim() != config.dnsServers.trim()) {
             val code = RootShell.stream("${UbuPaths.script("setup.sh")} --dns-only", ::log)
             if (code != 0) error("setup.sh --dns-only failed (exit $code)")
+        }
+        if (before?.aptMirror != config.aptMirror) {
+            val code = RootShell.stream("${UbuPaths.script("setup.sh")} --sources-only", ::log)
+            if (code != 0) error("setup.sh --sources-only failed (exit $code)")
         }
         Notice.SAVED
     }
@@ -116,6 +126,30 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         val r = RootShell.run("${UbuPaths.script("boot.sh")} --status")
         val value = r.out.firstOrNull { it.startsWith("module=") }?.substringAfter('=')
         return ModuleState.entries.firstOrNull { it.name.equals(value, ignoreCase = true) } ?: ModuleState.UNKNOWN
+    }
+
+    /** Runs doctor.sh (read-only); [redact] hides IP addresses, user and host names, serials. */
+    fun runDoctor(redact: Boolean) {
+        if (_state.value.doctorRunning) return
+        _state.update { it.copy(doctorRunning = true) }
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val version = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).versionName }
+                .getOrNull().orEmpty()
+            val cmd = buildString {
+                append(UbuPaths.script("doctor.sh"))
+                if (redact) append(" --redact")
+                if (version.isNotEmpty()) append(" --app-version ").append(Sh.quote(version))
+            }
+            val text = try {
+                RootShell.run(cmd).text
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                "doctor.sh failed: ${e.message ?: e.javaClass.simpleName}"
+            }
+            _state.update { it.copy(doctorRunning = false, doctor = DoctorReport(text, redact)) }
+        }
     }
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }

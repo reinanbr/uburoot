@@ -67,6 +67,12 @@ Available now:
   Wi-Fi, NFC... and which Android process holds each device), storage, mounts and the
   network. It changes nothing, and the report you share hides IP addresses, names and
   serial numbers unless you include them.
+- **Kernel access** (opt-in, Settings → *Kernel access*): root in Ubuntu gets the kernel's
+  own interfaces (configfs, debugfs, tracefs, BPF, cgroups, pstore, SELinux), the ROM's
+  kernel modules, and `uburoot-kernel` / `uburoot-kmod` / `uburoot-kbuild` for kernel
+  settings, modules, SELinux and out-of-tree builds. Every change made with them is
+  recorded and undone by *Stop all*, *Revert changes* or a reboot. Menu → *Kernel* shows
+  the state and the kernel logs. See [docs/KERNEL.md](docs/KERNEL.md).
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).
 - **Android integration**: `/sdcard`, `/data` and the system partitions are available
@@ -265,6 +271,9 @@ and the processes with Android:
   traffic without `sudo`. If you want that anyway:
   `sudo usermod -aG aid_net_raw,aid_net_admin <user>`.
 - `/system`, `/vendor` and `/apex` are mounted read-only, even for root.
+- With **Kernel access** on, root in Ubuntu also controls the kernel: settings, modules,
+  SELinux, USB gadget, tracing. Changes made with `uburoot-kernel` are undone by *Stop
+  all*; changes made by hand last until the next reboot.
 
 ## How it works
 

@@ -64,6 +64,16 @@ The release APK carries `module.prop`, `customize.sh`, `service.sh` and
   `sys.boot_completed`. On KernelSU/APatch it prints that recovery isn't supported and
   exits 1.
 
+## SELinux domain and kernel extensions
+
+All three put root in a **permissive** SELinux domain: Magisk `u:r:magisk:s0`
+(`permissive([proc])` in `native/src/sepolicy/rules.rs`), KernelSU `u:r:ksu:s0`
+(`ksu_permissive` in `kernel/selinux/rules.c`), and APatch uses `u:r:magisk:s0` with
+Magisk's policy. So SELinux doesn't block Ubuntu's root even on an enforcing phone.
+KernelSU (`ksud insmod`) and APatch (`apd insmod`) can load modules without the
+vermagic/CRC checks; APatch also has KPM, KernelPatch's own module format. UbuRoot
+uses plain `insmod` only. Details and source references are in [KERNEL.md](KERNEL.md).
+
 ## Known quirks
 
 - **Magisk sometimes rejects without a prompt.** On the test device, Magisk 31.1 logged

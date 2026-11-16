@@ -29,7 +29,8 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 | 0 | Gap analysis (`docs/NETHUNTER_PARITY.md`) | done |
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (released in 0.3.0) |
 | 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
-| 2 | Full kernel access (`KERNEL_ACCESS`) | next |
+| 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). **Not tested in the UI:** Settings toggle, Kernel screen (the phone has a PIN) |
+| 3 | Full hardware access (`HARDWARE_ACCESS`) | next |
 
 ## Core principle: system logic lives in shell scripts
 
@@ -72,6 +73,8 @@ no bashisms; `shellcheck -s sh` must pass.
 | `hangup.sh PID` | SIGHUP+SIGCONT to the chroot processes whose controlling tty is PID's stdin (the app passes a session's `su` client when its tab closes) |
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
 | `boot.sh [--now\|--status]` | run by the module's `service.sh`. Without `BOOT_START=1` it does nothing. Waits for shared storage to decrypt (if `MOUNT_SDCARD`, up to 6 h), runs `mount.sh`, then each executable `/etc/uburoot-boot.d/NAME` (`[A-Za-z0-9_-]+`, no symlinks) through `enter.sh root`. A script still running after `BOOT_SCRIPT_TIMEOUT` (60 s) is left running. `--now` skips the wait and `BOOT_START`; `--status` prints `module=enabled\|disabled\|removing\|pending\|missing` (`/data/adb/modules{,_update}/uburoot`, the same for all three managers) and `boot_start=` |
+| `kernel.sh` | `uburoot-kernel` (Ubuntu side, installed by mount.sh) and the app's backend (Android side, sources common.sh): `status`, `sysctl NAME [V]`, `devmode on\|off`, `selinux [enforcing\|permissive]` (asks; `-y`), `module list\|load\|unload`, `lastlog`, `revert`. Every change goes to `$UBU_STATE/changes` (`sysctl NAME ORIG`, `selinux - ORIG`, `module NAME -`; first change only; `boot_id` stamp; `.lock` dir); revert is newest first. As `uburoot-kmod`, args become `module ...` |
+| `kbuild.sh` | `uburoot-kbuild check\|prepare SRC\|build DIR`: GKI/vendor, expected vermagic from `/proc/config.gz`, signing/modversions verdict; `prepare` sets `LOCALVERSION` so `make kernelrelease` = `uname -r` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=`, `schema=`/`schema_current=`, and the root report: `cap_last_cap=`, `cap_eff=`, `cap_bnd=`, `no_new_privs=`, `seccomp=`, `full_root=yes\|no`, `selinux=` (used by the app) |
 | `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
 | `chroot-cmd.sh` | installed as `uburoot-cmd`; dispatches on `$0` (`uburoot-notify`... / `xdg-open`) to `uburoot-send`, through `sudo -n` unless root |
@@ -85,11 +88,14 @@ Config keys (`uburoot.conf`): `MOUNT_SDCARD`, `ANDROID_INTEGRATION`, `DNS_SERVER
 `APT_MIRROR` (empty = `ports.ubuntu.com/ubuntu-ports/`, or `archive.ubuntu.com` for
 amd64; `http://host/path/` only, checked by `ubu_valid_mirror` and
 `UbuConfig.isValidMirror`; only the release suites, `-security` always comes from
-Canonical).
+Canonical), `KERNEL_ACCESS` (0/1, Settings → Kernel access; `mount.sh` section 1b).
 
 Test-only env overrides (never set by the app): `UBU_MODULES` (default `/data/adb`), `UBU_BASE`, `ROOTFS`, `UBU_MOUNTS_FILE`,
 `UBU_INOTIFY_FILE` (Docker: the container's `/proc/sys` is the host's),
-`UBU_BB` (`none` = plain commands), `UBU_ALLOW_NONROOT=1`, `UBU_ALLOW_ANY_ARCH=1`.
+`UBU_BB` (`none` = plain commands), `UBU_ALLOW_NONROOT=1`, `UBU_ALLOW_ANY_ARCH=1`,
+`UBU_STATE`; kernel.sh: `UBU_SYSCTL_DIR`, `UBU_SELINUX_ENFORCE`, `UBU_PROC_MODULES`,
+`UBU_BOOT_ID_FILE`, `UBU_INSMOD`, `UBU_RMMOD`, `UBU_MODPROBE`; kbuild.sh: `UBU_KCONFIG`,
+`UBU_KBUILD_STATE`, `UBU_KBUILD_MAKEFLAGS`.
 
 ## CRITICAL SAFETY RULE: never `rm -rf` the rootfs while anything is mounted under it
 
@@ -101,7 +107,9 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
 2. aborts if `/proc/self/mounts` lists any mountpoint equal to or below the path;
 3. `rmdir`s the known bind targets (`data sdcard system vendor product system_ext odm
    apex linkerconfig`). `rmdir` cannot delete content, so a non-empty dir aborts;
-4. aborts if live-mount markers exist (`proc/self`, `sys/kernel`, `dev/block`);
+4. aborts if live-mount markers exist (`proc/self`, `sys/kernel`, `sys/fs`, `dev/block`,
+   `dev/binder`, `run/uburoot`); the module bind targets `usr/lib/modules/*/uburoot/*`
+   are `rmdir`ed like the other bind targets;
 5. checks the mounts again right before `rm -rf`.
 
 `reset.sh` runs `umount.sh --kill` first and aborts if it fails. In the app,
@@ -178,6 +186,7 @@ dev machine the default `java-25` is a JRE, so build with
 | `bridge/CommandReceiver` | exported receiver for `com.reinanbr.uburoot.CMD`, guarded by the signature permission `com.reinanbr.uburoot.permission.CMD`; notify (channel `messages`), toast, vibrate, clip, open URL / file (`bridge.sh take` into `cache/open/<id>/<name>`, FileProvider `${applicationId}.files`, `goAsync`). Answers `RESULT_OK` or 1 + message |
 | `bridge/ShareActivity` + `SharedPaths` | *Open in UbuRoot* (SEND `*/*`, text too): maps the shared item to its dir inside Ubuntu (externalstorage/downloads doc ids, MediaStore `RELATIVE_PATH`/`_data`, `file://`), checks it with `bridge.sh cwd`, else `bridge.sh import`; then a session with `UBU_CWD` |
 | `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor (mirror → `setup.sh --sources-only`), *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused), *Diagnostics* (`doctor.sh`, redacted unless the box is ticked; Share/Copy) |
+| `ui/KernelActivity` + `kernel/KernelViewModel`, `KernelStatus` | Kernel screen: everything through `kernel.sh` (with `-y`, the app confirms itself): state, devmode, SELinux switch (strongest warning), recorded changes + *Revert changes*, module list with unload for ours, `dmesg -w` / `lastlog` as root tabs (`SessionManager.create(command=)` → `enter.sh USER CMD`), doctor's Kernel section |
 | `ui/AboutActivity` | app version, license, source link, NOTICE / GPL / Apache texts from `assets/licenses/` |
 
 - libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
@@ -367,6 +376,41 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   USB_CONFIGFS_RNDIS SQUASHFS KVM KPROBES UPROBES DEBUG_INFO_BTF` = n. Sysctls:
   `kptr_restrict 4`, `dmesg_restrict 0`, `perf_event_paranoid 3`,
   `unprivileged_bpf_disabled 0`, `security.perf_harden=1`.
+- **Phase 2 kernel access, evidence (S9, 2026-11-16).**
+  - Host kernel mounts: configfs `/config`, debugfs, tracefs `/sys/kernel/tracing`, bpf
+    `/sys/fs/bpf` (38 netd/clatd pins), cgroup2 `/sys/fs/cgroup`, cgroup v1
+    `/dev/{blkio,cpuctl,cpuset,memcg,stune,freezer}`, pstore (`console-ramoops-0`),
+    selinuxfs, fusectl. No securityfs or binfmt_misc. `/proc/last_kmsg` exists.
+  - `mount.sh` binds the host's instance where there is one, makes it rslave, and
+    mounts a new instance only where the host has none and the type is in
+    `/proc/filesystems`. It never `mkdir`s inside sysfs/proc: it binds only where the
+    target exists.
+  - **Root is already in a permissive domain.** `u:r:magisk:s0` denials log
+    `permissive=1`. Sources (2026-11-16): Magisk `native/src/sepolicy/rules.rs`
+    `permissive([proc])` (commit `70d233cae2`); KernelSU `kernel/selinux/rules.c:92`
+    `ksu_permissive(db, KERNEL_SU_DOMAIN)` (`019a3c0103`); KernelPatch `scdefs.h`
+    `ALL_ALLOW_SCONTEXT_MAGISK "u:r:magisk:s0"`. So `selinux permissive` is rarely
+    needed.
+  - **kptr_restrict.** The S9 boots with 4, a vendor value: writes accept only 0–2
+    (`echo 3/4` fails). So `revert` writes 2 when the original is > 2 and can't be
+    written back (same effect: hidden even from root). Android init:
+    `on property:security.lower_kptr_restrict=1` writes 0, `=0` writes 2
+    (`/system/etc/init/hw/init.rc:1247`). `simpleperf record` toggles that property
+    (seen: the prop went from empty to `0`); `simpleperf stat`, trace-cmd and bpftool
+    don't touch it. Once during testing it read 0 with the property unset; the cause
+    was not found.
+  - Modules: `MODULE_SIG_FORCE=y`, so an unsigned `.ko` fails with "Required key not
+    available" and `uburoot-kmod` explains it. The ROM has no module directories.
+  - bpftool fails on 4.9 ("can't get next program": ID iteration and
+    `BPF_OBJ_GET_INFO_BY_FD` need 4.13). trace-cmd recorded 1060 `sched_switch` events
+    and set `tracing_on` back to 0. `simpleperf stat` works as root.
+  - With a session open, `selinux permissive` + `devmode on`, then `umount.sh --kill;
+    kernel.sh -y revert` (what *Stop all* runs) took 4 s. Afterwards: Enforcing,
+    kptr_restrict 2, `/proc/1/mountinfo` outside the rootfs identical to the baseline
+    (1068 lines), the USB gadget UDC still bound, the 38 BPF pins intact.
+  - Manager module loaders (`ksud insmod`, `apd insmod`, APatch KPM) are documented in
+    `docs/KERNEL.md`, not wrapped: they are manager-specific, and KPM needs the
+    superkey.
 - **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
   S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
   the archive signatures anyway). The app copies a SAF file into its cache, then
@@ -481,8 +525,10 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 30 files, guard 13/13, Docker
-  182/182 (Phase 1 result: 17 files, 13/13, 70/70).
+- `tests/run-all.sh`: everything below. Now: shellcheck 32 files, guard 17/17, Docker
+  223/223 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
+  (0.9.0) must pass too: no `A && B || C`, `head -n 1 file` instead of `cat | head`,
+  and `disable=SC2317,SC2329` together.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
 - `tests/test_reset_guard.sh`: critical rule with dummy dirs, a fake mounts table and a

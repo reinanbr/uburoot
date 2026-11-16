@@ -23,3 +23,6 @@ if [ -d "$UBU_BASE" ]; then
 fi
 if ubu_rootfs_installed; then printf 'rootfs=installed\n'; else printf 'rootfs=absent\n'; fi
 if [ -f "$ROOTFS/etc/uburoot-setup.done" ]; then printf 'setup=done\n'; else printf 'setup=pending\n'; fi
+printf 'schema=%s\n' "$(ubu_rootfs_schema)"
+printf 'schema_current=%s\n' "$UBU_SCHEMA"
+ubu_root_report

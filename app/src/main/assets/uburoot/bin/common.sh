@@ -21,6 +21,14 @@ UBU_INOTIFY_FILE="${UBU_INOTIFY_FILE:-/proc/sys/fs/inotify/max_user_watches}"
 UBU_BIND_TARGETS="data sdcard system vendor product system_ext odm apex linkerconfig"
 # Android partitions bound recursively at the same path inside the rootfs.
 UBU_ANDROID_PARTS="/system /vendor /product /system_ext /odm /apex /linkerconfig"
+# Host kernel filesystems bound into the chroot's sysfs (type:path); mount.sh.
+UBU_KERNEL_FS="configfs:/sys/kernel/config debugfs:/sys/kernel/debug tracefs:/sys/kernel/tracing bpf:/sys/fs/bpf"
+
+# Version of the integration files setup.sh writes into the rootfs. Bump it
+# together with a new migrate_N in setup.sh; the app runs `setup.sh --migrate`
+# when /etc/uburoot-release has an older SCHEMA.
+UBU_SCHEMA=1
+UBU_PORTS_MIRROR_DEFAULT=http://ports.ubuntu.com/ubuntu-ports/
 
 if [ -x /system/bin/sh ]; then UBU_SH=/system/bin/sh; else UBU_SH="sh"; fi
 
@@ -50,6 +58,7 @@ ubu_load_config() {
     INOTIFY_MAX_WATCHES=524288
     BOOT_START=0
     BOOT_SCRIPT_TIMEOUT=60
+    APT_MIRROR=""
     if [ -f "$UBU_CONFIG" ]; then
         # shellcheck source=/dev/null
         . "$UBU_CONFIG"
@@ -183,6 +192,120 @@ ubu_validate_paths() {
 }
 
 ubu_rootfs_installed() { [ -x "$ROOTFS/usr/bin/env" ] && [ -x "$ROOTFS/bin/bash" ]; }
+
+# ubu_elf_arch FILE: Debian architecture of an ELF binary (arm64, armhf, amd64,
+# i386), from e_machine. FILE must not be a symlink: an absolute link inside a
+# rootfs would resolve on the host.
+ubu_elf_arch() {
+    if [ ! -f "$1" ] || [ -L "$1" ]; then return 1; fi
+    case "$(bb od -An -tx1 -j18 -N2 "$1" 2>/dev/null | tr -d ' \n')" in
+        b700) printf arm64 ;;
+        2800) printf armhf ;;
+        3e00) printf amd64 ;;
+        0300) printf i386 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Debian architecture this CPU runs natively (uname -m).
+ubu_native_arch() {
+    case "$(uname -m)" in
+        aarch64 | arm64) printf arm64 ;;
+        armv7* | armv8l) printf armhf ;;
+        x86_64) printf amd64 ;;
+        i?86) printf i386 ;;
+        *) return 1 ;;
+    esac
+}
+
+# The rootfs's integration schema (/etc/uburoot-release), 0 when absent.
+ubu_rootfs_schema() {
+    _s=$(bb awk -F= '$1 == "SCHEMA" { print $2; exit }' "$ROOTFS/etc/uburoot-release" 2>/dev/null)
+    case "$_s" in '' | *[!0-9]*) printf 0 ;; *) printf '%s' "$_s" ;; esac
+}
+
+# ubu_valid_mirror URL: an http:// Ubuntu mirror. Plain http on purpose: Ubuntu
+# Base has no CA certificates, so apt can't use https before the first install
+# (apt checks every index against the archive key either way).
+ubu_valid_mirror() {
+    case "$1" in
+        http://?*/) ;;
+        *) return 1 ;;
+    esac
+    case "${1#http://}" in
+        *[!A-Za-z0-9._~:/-]* | /* | *//*) return 1 ;;
+    esac
+    return 0
+}
+
+# ---------------------------------------------------------------------------
+# Root quality: UbuRoot requires a root with full kernel access. A root
+# manager can hand out less: KernelSU's App Profile sets CapEff/CapPrm/CapBnd
+# from its capability field and can switch the SELinux domain
+# (kernel/policy/app_profile.c, escape_with_root_profile). Seccomp and
+# NoNewPrivs would also cut kernel access.
+# ---------------------------------------------------------------------------
+# Hex mask of every capability up to cap_last_cap N, without leading zeros.
+ubu_cap_full_mask() {
+    bb awk -v n="$1" 'BEGIN {
+        b = n + 1; s = ""
+        for (i = 0; i < int(b / 4); i++) s = s "f"
+        if (b % 4) s = substr("137", b % 4, 1) s
+        print s
+    }'
+}
+
+# key=value lines about this shell's root; full_root=yes|no is the verdict.
+ubu_root_report() {
+    _last=$(cat /proc/sys/kernel/cap_last_cap 2>/dev/null)
+    case "$_last" in '' | *[!0-9]*) _last="" ;; esac
+    _mask=$(ubu_cap_full_mask "${_last:-0}")
+    bb awk -v full="$_mask" -v last="$_last" '
+        /^CapEff:/ { e = $2 }
+        /^CapBnd:/ { b = $2 }
+        /^NoNewPrivs:/ { n = $2 }
+        /^Seccomp:/ { s = $2 }
+        END {
+            ee = e; sub(/^0+/, "", ee)
+            bn = b; sub(/^0+/, "", bn)
+            # NoNewPrivs is only listed since Linux 4.10: absent means not set.
+            ok = (last != "" && ee == full && bn == full && (n == "" || n == 0) && s == 0)
+            print "cap_last_cap=" last
+            print "cap_eff=" e
+            print "cap_bnd=" b
+            print "no_new_privs=" (n == "" ? 0 : n)
+            print "seccomp=" s
+            print "full_root=" (ok ? "yes" : "no")
+        }' "/proc/$$/status"
+    printf 'selinux=%s\n' "$(tr -d '\000' </proc/self/attr/current 2>/dev/null)"
+}
+
+# ---------------------------------------------------------------------------
+# Kernel interfaces for the chroot (mount.sh)
+# ---------------------------------------------------------------------------
+# ubu_fs_mount TYPE PREFERRED: a host mountpoint of filesystem TYPE outside the
+# rootfs, PREFERRED when it is one. Android 12 mounts configfs at /config.
+ubu_fs_mount() {
+    bb awk -v t="$1" -v p="$2" -v r="$ROOTFS" '
+        $3 != t || $2 == r || index($2, r "/") == 1 { next }
+        $2 == p { print p; found = 1; exit }
+        first == "" { first = $2 }
+        END { if (!found && first != "") print first }' "$UBU_MOUNTS_FILE"
+}
+
+# The ROM's kernel modules for the running kernel: the first candidate with a
+# modules.dep (where modprobe looks).
+ubu_module_dir() {
+    _kv=$(uname -r)
+    for _d in "/lib/modules/$_kv" /vendor_dlkm/lib/modules /vendor/lib/modules \
+        "/system_dlkm/lib/modules/$_kv" /system_dlkm/lib/modules /odm/lib/modules; do
+        if [ -f "$_d/modules.dep" ]; then
+            printf '%s' "$_d"
+            return 0
+        fi
+    done
+    return 1
+}
 
 # ---------------------------------------------------------------------------
 # Mount table helpers (paths in /proc/self/mounts escape ' ' as \040 etc.;
@@ -318,8 +441,13 @@ ubu_safe_rm() {
 # ubu_ensure_profile_hook ROOTFS: login hook that applies UBU_CWD / UBU_INIT
 # (start directory and initial command chosen by the app), then unsets them.
 ubu_ensure_profile_hook() {
+    [ -f "$1/etc/profile.d/uburoot.sh" ] && return 0
+    ubu_write_profile_hook "$1"
+}
+
+# Always (re)writes it: setup.sh and its migrations.
+ubu_write_profile_hook() {
     _f="$1/etc/profile.d/uburoot.sh"
-    [ -f "$_f" ] && return 0
     mkdir -p "$1/etc/profile.d" || return 1
     cat >"$_f" <<'EOF'
 # UbuRoot login hook: start directory and initial command chosen by the app.

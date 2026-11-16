@@ -90,7 +90,32 @@ grep -q ' /apex/com.android.runtime ' /proc/self/mounts || mount -t tmpfs tmpfs 
 section "rootinfo / install"
 info=$(/system/bin/sh $B/rootinfo.sh 2>&1)
 check "rootinfo detects Magisk-path busybox" sh -c "printf '%s' \"\$1\" | grep -qx 'busybox=/data/adb/magisk/busybox'" _ "$info"
-check "install rejects a wrong SHA256" sh -c "! $B/install.sh '$TARBALL' 0000"
+has() { printf '%s\n' "$1" | grep -qx "$2"; }
+check "rootinfo: full root (privileged container root)" has "$info" full_root=yes
+check "rootinfo: schema 0 before install" has "$info" schema=0
+check "rootinfo: a dropped capability means full_root=no" sh -c "setpriv --bounding-set -sys_module /system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx full_root=no"
+check "rootinfo: no_new_privs means full_root=no" sh -c "setpriv --no-new-privs /system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx full_root=no"
+check "install rejects a wrong SHA256" sh -c "! $B/install.sh '$TARBALL' $(printf '%064d' 0)"
+check "install rejects a malformed SHA256" sh -c "! $B/install.sh '$TARBALL' 0000 && ! $B/install.sh '$TARBALL' zz$(printf '%062d' 0)"
+printf 'not an archive\n' >/tmp/junk.tar.gz
+check "install rejects a file that is not .tar.gz/.tar.xz" sh -c "! $B/install.sh /tmp/junk.tar.gz && [ ! -e $R ] && [ ! -e $R.partial ]"
+# An arm64 rootfs on this amd64 CPU: dpkg's ELF e_machine says so.
+mkdir -p /tmp/fakearm/usr/bin
+cp /usr/bin/dpkg /tmp/fakearm/usr/bin/dpkg && cp /usr/bin/dpkg /tmp/fakearm/usr/bin/env
+printf '\267\000' | dd of=/tmp/fakearm/usr/bin/dpkg bs=1 seek=18 conv=notrunc 2>/dev/null
+tar -C /tmp/fakearm -czf /tmp/fakearm.tar.gz usr
+check "install refuses a rootfs for another CPU" sh -c "$B/install.sh /tmp/fakearm.tar.gz 2>&1 | grep -q 'is for arm64'"
+check "  ... and leaves nothing behind" sh -c "[ ! -e $R ] && [ ! -e $R.partial ]"
+if command -v xz >/dev/null 2>&1 || apt-get install -y -qq xz-utils >/dev/null 2>&1; then
+    gzip -dc "$TARBALL" | xz -1 -T0 >/tmp/ubuntu-base.tar.xz
+    XSHA=$(sha256sum /tmp/ubuntu-base.tar.xz | cut -d' ' -f1 | tr a-f A-F)
+    check "install from .tar.xz (SHA256 in upper case)" $B/install.sh /tmp/ubuntu-base.tar.xz "$XSHA"
+    check "  ... rootfs in place" test -x $R/usr/bin/dpkg
+    check "reset of the unmounted .tar.xz rootfs" $B/reset.sh --yes
+    rm -f /tmp/ubuntu-base.tar.xz
+else
+    bad "xz-utils for the .tar.xz test"
+fi
 check "install with correct SHA256" $B/install.sh "$TARBALL" "$SHA"
 check "rootfs installed, no .partial left" sh -c "[ -x $R/usr/bin/env ] && [ ! -e $R.partial ]"
 check "second install refused" sh -c "! $B/install.sh '$TARBALL' '$SHA'"
@@ -136,6 +161,46 @@ $B/mount.sh 2>/dev/null
 check "INOTIFY_MAX_WATCHES=0 leaves it alone" grep -qx 100 "$UBU_INOTIFY_FILE"
 rm -f /data/local/uburoot/uburoot.conf
 
+section "rootfs schema and migrations"
+REL=$R/etc/uburoot-release
+check "uburoot-release: SCHEMA=1" grep -qx SCHEMA=1 $REL
+check "uburoot-release: UBUNTU and INSTALLED" sh -c "grep -q '^UBUNTU=.' $REL && grep -q '^INSTALLED=[0-9]' $REL"
+check "rootinfo: schema=1" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=1"
+check "--migrate on a current rootfs is a no-op" sh -c "$B/setup.sh --migrate 2>&1 | grep -q 'up to date'"
+# What a rootfs set up by 0.2.x looks like: no release file, older or missing
+# integration files.
+cp $R/etc/passwd /tmp/passwd.before
+cp $R/etc/apt/sources.list.d/ubuntu.sources /tmp/sources.before
+rm -f $REL $R/usr/local/sbin/uburoot-iptables-select
+echo '# old hook' >$R/etc/profile.d/uburoot.sh
+chroot $R gpasswd -d root aid_net_raw >/dev/null 2>&1
+check "rootinfo: schema=0 on an old rootfs" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=0"
+if $B/setup.sh --migrate >/tmp/migrate.log 2>&1; then ok "setup.sh --migrate"; else bad "setup.sh --migrate"; tail -20 /tmp/migrate.log; fi
+check "migrated: SCHEMA=1" grep -qx SCHEMA=1 $REL
+check "migrated: profile hook rewritten" grep -q UBU_CWD $R/etc/profile.d/uburoot.sh
+check "migrated: iptables selector back" test -x $R/usr/local/sbin/uburoot-iptables-select
+check "migrated: root back in aid_net_raw" sh -c "chroot $R id -Gn root | grep -qw aid_net_raw"
+check "migrated: users and APT sources untouched" sh -c "cmp -s /tmp/passwd.before $R/etc/passwd && cmp -s /tmp/sources.before $R/etc/apt/sources.list.d/ubuntu.sources"
+sed -i 's/^SCHEMA=.*/SCHEMA=99/' $REL
+check "--migrate leaves a newer rootfs alone" sh -c "$B/setup.sh --migrate 2>&1 | grep -q newer && grep -qx SCHEMA=99 $REL"
+sed -i 's/^SCHEMA=.*/SCHEMA=1/' $REL
+mv $R/etc/uburoot-setup.done /tmp/setup.done
+check "--migrate refuses before setup has run" sh -c "! $B/setup.sh --migrate"
+mv /tmp/setup.done $R/etc/uburoot-setup.done
+
+section "APT mirror (setup.sh --sources-only)"
+SRC=$R/etc/apt/sources.list.d/ubuntu.sources
+echo "APT_MIRROR='http://mirror.example.org/ubuntu/'" >/data/local/uburoot/uburoot.conf
+check "--sources-only with APT_MIRROR" $B/setup.sh --sources-only
+check "release suites from the mirror" grep -qx 'URIs: http://mirror.example.org/ubuntu/' $SRC
+check "security still from Canonical" grep -qx 'URIs: http://security.ubuntu.com/ubuntu/' $SRC
+for m in https://mirror.example.org/ubuntu/ 'http://x/;reboot/' http://mirror.example.org/ubuntu; do
+    echo "APT_MIRROR='$m'" >/data/local/uburoot/uburoot.conf
+    check "rejected mirror: $m (sources unchanged)" sh -c "! $B/setup.sh --sources-only && grep -q mirror.example.org $SRC"
+done
+rm -f /data/local/uburoot/uburoot.conf
+check "no APT_MIRROR: back to the default sources" sh -c "$B/setup.sh --sources-only && cmp -s /tmp/sources.before $SRC"
+
 section "mount.sh"
 n1=$(mounted_under $R)
 $B/mount.sh 2>/dev/null
@@ -147,6 +212,30 @@ done
 check "/product mirrored as symlink" sh -c "[ \"\$(readlink $R/product)\" = /system/product ]"
 check "no shared mount under rootfs" sh -c "! awk -v p=$R '(\$5==p||index(\$5,p\"/\")==1){for(i=7;i<=NF&&\$i!=\"-\";i++)if(\$i~/^shared:/)f=1}END{exit !f}' /proc/self/mountinfo"
 check "rootfs/data is non-recursive (no mounts seen through it)" test ! -e $R/data/local/uburoot/rootfs/proc/self
+
+section "doctor.sh (read-only report)"
+mkdir -p /vendor/lib/modules
+printf '\000vermagic=4.9.337 SMP preempt mod_unload aarch64\000name=fake\000' >/vendor/lib/modules/fake.ko
+echo "DEFAULT_USER='tester'" >/data/local/uburoot/uburoot.conf
+n1=$(mounted_under $R)
+/system/bin/sh $B/doctor.sh --app-version test >/tmp/doctor.txt 2>&1
+rc=$?
+check "doctor runs (rc=$rc)" test "$rc" = 0
+check "doctor: every section" sh -c "for s in Root Android Kernel Hardware Storage Mounts Network Config; do grep -qx \"== \$s ==\" /tmp/doctor.txt || exit 1; done"
+check "doctor: summary line" grep -q '^summary: [0-9]* failed' /tmp/doctor.txt
+check "doctor: full root ok" grep -q '^full root: *\[ok\]' /tmp/doctor.txt
+check "doctor: schema ok" grep -q '^integration schema: *\[ok\] 1' /tmp/doctor.txt
+check "doctor: vendor module vermagic" grep -q '^vendor vermagic: *4.9.337 SMP preempt mod_unload aarch64 (fake.ko)' /tmp/doctor.txt
+check "doctor: changed no mounts" test "$(mounted_under $R)" = "$n1"
+check "doctor (plain) names the user" grep -qw tester /tmp/doctor.txt
+/system/bin/sh $B/doctor.sh --redact >/tmp/doctor-r.txt 2>&1
+check "redacted: no user name" sh -c "! grep -qw tester /tmp/doctor-r.txt"
+check "redacted: no kernel hostname" sh -c "! grep -qwF \"\$(cat /proc/sys/kernel/hostname)\" /tmp/doctor-r.txt"
+check "redacted: marked as such" grep -q '^redacted: *yes' /tmp/doctor-r.txt
+check "redacted: same report shape" test "$(wc -l </tmp/doctor.txt)" = "$(wc -l </tmp/doctor-r.txt)"
+setpriv --bounding-set -sys_module /system/bin/sh $B/doctor.sh >/tmp/doctor-x.txt 2>&1
+check "doctor: restricted root reported as FAIL" grep -q '^full root: *\[FAIL\]' /tmp/doctor-x.txt
+rm -f /data/local/uburoot/uburoot.conf /vendor/lib/modules/fake.ko
 
 section "enter.sh"
 out=$($B/enter.sh root 'id; ls /sdcard/Download; cat /data/precious/app.db; am start -a X; echo LANG=$LANG TERM=$TERM' 2>&1)

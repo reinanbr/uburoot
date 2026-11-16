@@ -44,6 +44,20 @@ echo keep >$SENT_DATA
 echo keep >$SENT_SD
 sentinels() { [ -f $SENT_DATA ] && [ -f $SENT_SD ] && [ -d /data/data/android ] && [ -x /system/bin/sh ]; }
 
+section "root quality and doctor"
+info=$(sh $B/rootinfo.sh 2>/dev/null)
+has "rootinfo: full root" "$info" "full_root=yes"
+case "$info" in *"schema=0"* | *"schema=1"*) ok "rootinfo: schema reported" ;; *) bad "rootinfo: schema reported" ;; esac
+_mi=$(total)
+sh $B/doctor.sh >/data/local/tmp/uburoot-doctor.txt 2>&1
+check "doctor runs" test "$?" = 0
+has "doctor: summary" "$(cat /data/local/tmp/uburoot-doctor.txt)" "summary: "
+check "doctor: no FAIL line" sh -c "! grep -q '\[FAIL\]' /data/local/tmp/uburoot-doctor.txt"
+check "doctor: changed no mounts" test "$(total)" = "$_mi"
+sh $B/doctor.sh --redact >/data/local/tmp/uburoot-doctor.txt 2>&1
+check "doctor --redact hides the user" sh -c "! grep -qw '$TU' /data/local/tmp/uburoot-doctor.txt"
+rm -f /data/local/tmp/uburoot-doctor.txt
+
 section "mount.sh"
 $B/umount.sh >/dev/null 2>&1
 base_total=$(total)

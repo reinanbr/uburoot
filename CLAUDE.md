@@ -248,10 +248,12 @@ dev machine the default `java-25` is a JRE, so build with
   receiver's error text reaches the terminal (`no app can open nosuchscheme://x`).
   Sharing an externalstorage document opened a session in `/sdcard/Download`, and
   sharing text opened one in `~/Shared`.
-- Not testable from adb: the MediaStore branch of `ShareActivity.locate`. A
+- The MediaStore branch of `ShareActivity.locate` can't be tested from adb: a
   `--grant-read-uri-permission` from `am` (shell or root) doesn't give the app access
-  (`SecurityException ... has no access to content://media/...`). A real share comes
-  with the sender's grant. The mapping itself is unit-tested (`SharedPathsTest`).
+  (`SecurityException ... has no access to content://media/...`). A real share does.
+  On 2026-11-16 the user shared a photo from the gallery (uid 10073,
+  `content://media/external/images/media/<id>`). The session opened in
+  `/sdcard/Pictures/Screenshots`, with no import and no error.
 - `ShareActivity` has `taskAffinity=""`. Otherwise a share started with `NEW_TASK`
   became the root of the terminal's task, and the next identical share only brought
   that task to the front (no new activity).

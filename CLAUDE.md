@@ -523,6 +523,34 @@ download-artifact v8):
 - The R8 release build (1.3 MB vs 11.4 MB debug) was installed on the device:
   preflight, deploy, terminal and the session suite (35/35) passed.
 
+## F-Droid (checked 2026-11-16)
+
+- Recipe for fdroiddata: `tools/fdroid/com.reinanbr.uburoot.yml`. Categories are
+  Development and System. `Binaries:` points at the GitHub release APK,
+  `AllowedAPKSigningKeys` is the release key, and checkupdates follows tags
+  `^v\d+\.\d+\.\d+$`. The text comes from `fastlane/metadata` in this repo.
+- `tools/fdroid-check.sh [VERSIONCODE]` runs fdroidserver from PyPI in a temp venv:
+  `lint`, `rewritemeta` (must not change the file), then `fdroid build` from the tag,
+  compared with the published APK. 0.2.0 passed: lint clean, scanner clean (it only
+  removes `gradle-wrapper.jar`), "compared built binary to supplied reference binary
+  successfully". So F-Droid can ship our own signed APK.
+- Policy (current English Inclusion Policy): JitPack.io is a listed trusted Maven repo
+  for FLOSS binaries (Termux's libs and libsu are Apache-2.0). Termux itself is on
+  F-Droid with no AntiFeatures. Downloading executables needs explicit user consent:
+  ours is the install form's button.
+- The buildserver is Debian trixie, so the recipe installs `openjdk-21-jdk-headless`
+  with `sudo:`. Gradle 9.9.1 is in F-Droid's gradle-transparency-log with the same
+  SHA-256 as our wrapper.
+- fdroidserver 2.4.5 local-mode quirks (worked around in the script): the PyPI
+  package has no `gradlew-fdroid` (`gradle:` in config.yml points at the wrapper's
+  distribution); it reads `SOURCE_DATE_EPOCH` before cloning (pre-clone into
+  `build/<appid>`); categories.yml needs its icons (stripped).
+- For each release: keep the asset name `uburoot-<ver>-release.apk`. After tagging,
+  update the recipe in fdroiddata (new `Builds` entry, `CurrentVersion*`; checkupdates
+  can do it) and run the check script.
+- The merge request to gitlab.com/fdroid/fdroiddata needs the owner's GitLab account
+  (fork, add the recipe, use the MR template). It is not opened from here.
+
 ## Work rules
 
 - Code, comments and docs in English; UI strings in English (`values/`) with the pt-BR

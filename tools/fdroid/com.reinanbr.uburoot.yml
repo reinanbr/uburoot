@@ -1,0 +1,33 @@
+Categories:
+  - Development
+  - System
+License: Apache-2.0
+AuthorName: reinanbr
+SourceCode: https://github.com/reinanbr/uburoot
+IssueTracker: https://github.com/reinanbr/uburoot/issues
+Changelog: https://github.com/reinanbr/uburoot/blob/HEAD/CHANGELOG.md
+
+AutoName: UbuRoot
+
+RepoType: git
+Repo: https://github.com/reinanbr/uburoot.git
+Binaries: https://github.com/reinanbr/uburoot/releases/download/v%v/uburoot-%v-release.apk
+
+Builds:
+  - versionName: 0.2.0
+    versionCode: 2
+    commit: 1d634d229b4d8f8e5070533fcf687c8c5a8e63f8
+    subdir: app
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-21-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - yes
+
+AllowedAPKSigningKeys: b2fbab8052e8bc9ee7cb01bc26f309ce972d16fdda34a52bdb15b2628d2ab53d
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v\d+\.\d+\.\d+$
+CurrentVersion: 0.2.0
+CurrentVersionCode: 2

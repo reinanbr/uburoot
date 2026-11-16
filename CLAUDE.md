@@ -15,7 +15,7 @@ Play Core, or any proprietary Google dependency.
 | 1 | Shell scripts + shellcheck + critical-rule tests | done (Docker 70/70; device 53/53 on Magisk, LineageOS 19.1 / Android 12) |
 | 2 | App MVP: root check, installer, one terminal session | done (unit 17/17; on device: clean install discover→download→SHA256→extract→setup→terminal, resume after a kill, apt as the user; device suite 59/59 incl. real reset; in-app session suite 35/35, host root identical to baseline after umount; dev/network suite 54/54; R8 release build verified on device) |
 | 3 | Multiple sessions, foreground service, extra keys, settings | done (unit 22/22, Docker 90/90, device 53/53; on device: tabs, extra keys incl. sticky CTRL, links, themes, notification actions, wake lock, settings save/DNS/repair, Stop all in ~5 s, preflight waits for Stop all) |
-| 4 | Android integration (receiver, `uburoot-*` commands) | todo |
+| 4 | Android integration (receiver, `uburoot-*` commands, share target) | done (unit 26/26, Docker 116/116; on device: every command as a sudoer and as a non-sudoer, in the background and with the app force-stopped, file/URL open, errors back in the terminal, share of a document/text) |
 | 5 | Boot module (Magisk/KSU/APatch zip) | todo |
 
 ## Core principle: system logic lives in shell scripts
@@ -39,6 +39,10 @@ no bashisms; `shellcheck -s sh` must pass.
 | `$ROOTFS/usr/local/bin/{am,pm,cmd,settings,dumpsys,getprop,wm,input,content,svc,appops,android}` | wrappers (only for tools present in `/system/bin`) |
 | `$ROOTFS/usr/local/lib/uburoot/android-run` | runner used by the wrappers (`--pipes` / `--tty`) |
 | `$ROOTFS/etc/profile.d/uburoot.sh` | applies `UBU_CWD` / `UBU_INIT` on login |
+| `$ROOTFS/usr/local/lib/uburoot/uburoot-{send,cmd}` | bridge helpers (from `chroot-send.sh` / `chroot-cmd.sh`), root:root 755 |
+| `$ROOTFS/usr/local/bin/{uburoot-notify,uburoot-toast,uburoot-vibrate,uburoot-clip,uburoot-open,xdg-open}` | symlinks to `uburoot-cmd` |
+| `$ROOTFS/etc/sudoers.d/80-uburoot` | `ALL ALL=(root) NOPASSWD: /usr/local/lib/uburoot/uburoot-send` (0440) |
+| `$ROOTFS/var/lib/uburoot/outbox/` | root-only (0700) staging for `uburoot-open` files |
 
 ### Scripts (`app/src/main/assets/uburoot/bin/`)
 
@@ -54,6 +58,9 @@ no bashisms; `shellcheck -s sh` must pass.
 | `hangup.sh PID` | SIGHUP+SIGCONT to the chroot processes whose controlling tty is PID's stdin (the app passes a session's `su` client when its tab closes) |
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=` (used by the app) |
+| `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
+| `chroot-cmd.sh` | installed as `uburoot-cmd`; dispatches on `$0` (`uburoot-notify`... / `xdg-open`) to `uburoot-send`, through `sudo -n` unless root |
+| `bridge.sh` | app side: `take ID DEST` (outbox file → the app's cache file), `import SRC NAME` (into the default user's `~/Shared`, as that user inside the chroot), `cwd DIR` (exit 0 if the default user can enter DIR) |
 
 Config keys (`uburoot.conf`): `MOUNT_SDCARD`, `ANDROID_INTEGRATION`, `DNS_SERVERS`,
 `DEFAULT_USER`, `INIT_COMMAND`, `UBU_HOSTNAME`, `SDCARD_SOURCE` (optional override),
@@ -117,7 +124,7 @@ the phone's real data**. All recursive deletion under `UBU_BASE` goes through
 - `/dev` is the real Android `/dev`. Creating `dev/shm` or `dev/fd` there creates them
   on the device's `/dev` tmpfs (harmless, lost at reboot).
 
-## App (Phases 2–3)
+## App (Phases 2–4)
 
 Build: AGP 9.5.1 with **built-in Kotlin** (never apply `org.jetbrains.kotlin.android`;
 only `org.jetbrains.kotlin.plugin.compose`), Kotlin 2.4.21, Gradle wrapper 9.9.1
@@ -142,6 +149,8 @@ dev machine the default `java-25` is a JRE, so build with
 | `terminal/SessionService` | foreground service (`specialUse`), started with the first session, stops after the last; notification with count + *New session* / *Stop all* / wake lock (partial wake lock + `WIFI_MODE_FULL_HIGH_PERF` lock, as Termux). *Stop all* = close sessions + `umount.sh --kill`; `stopping` flow makes the preflight wait |
 | `terminal/TerminalActivity` | `singleTask`; one `TerminalView`, tabs re-`attachSession`; menu (new/root session, close, themes, wake lock, settings, stop all); Back = `moveTaskToBack`; Enter on the last finished tab → `MainActivity` |
 | `terminal/ExtraKeys`, `TerminalTheme`, `TerminalPrefs`, `Links` | extra keys rows (pointer input, so the IME keeps focus; hold to repeat), color schemes into `TerminalColors.COLOR_SCHEME`, SharedPreferences (theme, font sp), URL in the tapped word |
+| `bridge/CommandReceiver` | exported receiver for `com.reinanbr.uburoot.CMD`, guarded by the signature permission `com.reinanbr.uburoot.permission.CMD`; notify (channel `messages`), toast, vibrate, clip, open URL / file (`bridge.sh take` into `cache/open/<id>/<name>`, FileProvider `${applicationId}.files`, `goAsync`). Answers `RESULT_OK` or 1 + message |
+| `bridge/ShareActivity` + `SharedPaths` | *Open in UbuRoot* (SEND `*/*`, text too): maps the shared item to its dir inside Ubuntu (externalstorage/downloads doc ids, MediaStore `RELATIVE_PATH`/`_data`, `file://`), checks it with `bridge.sh cwd`, else `bridge.sh import`; then a session with `UBU_CWD` |
 | `ui/SettingsActivity` + `settings/SettingsViewModel` | `uburoot.conf` editor, *Repair mounts* (`umount.sh --kill && mount.sh`), *Reset Ubuntu* (`reset.sh --yes`, exit 3 = refused) |
 
 - libsu: `FLAG_MOUNT_MASTER` **silently falls back** to plain `su`, then `sh`
@@ -190,8 +199,10 @@ dev machine the default `java-25` is a JRE, so build with
 - Foreground service type: `specialUse` with `PROPERTY_SPECIAL_USE_FGS_SUBTYPE`
   (no other type fits a terminal). The typed `startForeground` path (API 34+) and the
   POST_NOTIFICATIONS request (API 33+) are untested: the test phone is Android 12.
-  Also untested on the device: hardware keyboard shortcuts (Android 12's `input` has no
-  `keycombination`) and pinch-to-zoom (no multi-touch over adb).
+  Hardware keyboard shortcuts were verified with a virtual keyboard: a Python script in
+  the chroot (as root) creates a `/dev/uinput` device (Android 12's `input` has no
+  `keycombination`). Ctrl+Shift+V pasted and Ctrl+Shift+T opened a tab. Still untested:
+  Ctrl+Shift+C (needs a touch selection) and pinch-to-zoom (no multi-touch over adb).
 - User names: `[a-z_][a-z0-9_-]{0,31}`, minus the accounts that already exist in
   Ubuntu Base (`setup.sh` would reuse them and grant sudo). Without `--uid`, `setup.sh`
   takes the first id >= 9000 that is free as both uid and gid.
@@ -199,6 +210,48 @@ dev machine the default `java-25` is a JRE, so build with
   and community translations), Brazilian Portuguese in `values-pt-rBR/strings.xml`.
   Every new string goes into both. The reset confirmation word is a string too: `DELETE`
   in English, `APAGAR` in pt-BR. No Ubuntu logo: the icon is a plain `>_` prompt.
+
+## Android bridge (Phase 4)
+
+- **A chroot user can't broadcast.** `am broadcast` as uid 9000 fails (rc 255, verified
+  on the device): the uid holds no Android permission. As root it works, and root (uid 0)
+  passes every permission check, including the receiver's signature permission (which
+  keeps other apps and adb's shell uid out). So the `uburoot-*` commands go through
+  **one sudo rule** for one root helper (`uburoot-send`). The helper re-validates every
+  argument, caps text at 100 kB (one binder transaction) and only sends fixed extras.
+- **Files are read as the caller** (`setpriv --reuid=$SUDO_UID --regid=$SUDO_GID
+  --init-groups`), never as root, and copied into the root-only outbox under a random
+  16-hex id. The app then pre-creates `cache/open/<id>/<name>` itself (so the file has the
+  app's owner and SELinux label) and runs `bridge.sh take`, which only fills that file.
+  Viewers get a `content://` URI with a read grant. Outbox leftovers older than a day are
+  deleted on the next open; the app's copies after a day.
+- `am broadcast` is ordered (serialized), so the receiver's result code/data comes back:
+  `result=-1` = done, else `data="<message>"` is printed in the terminal.
+- **Background activity starts:** Android 10+ blocks them, so `open` passes
+  `--allow-background-activity-starts` (present in Android 12's `am`; only the broadcast
+  sender's privilege matters) and the receiver keeps the broadcast open with `goAsync`
+  until the viewer has started (≤ 8 s of the foreground broadcast's 10 s).
+- **Import runs as the user inside the chroot** (`setpriv` + `chroot`), so a symlinked
+  `~/Shared` can't make root write outside it (Docker test with `~/Shared -> /hostonly`).
+- Verified on the device (Magisk 31.1, Android 12): every command as `ana` (a sudoer)
+  and as a user outside `sudo`, with the app in the background and force-stopped (a
+  cold start takes 0.75 s, `open` of a file 1.1 s). `/etc/shadow` and another user's
+  file are refused. The copy in `cache/open` is `u0_a123` with label `app_data_file`. The
+  receiver's error text reaches the terminal (`no app can open nosuchscheme://x`).
+  Sharing an externalstorage document opened a session in `/sdcard/Download`, and
+  sharing text opened one in `~/Shared`.
+- Not testable from adb: the MediaStore branch of `ShareActivity.locate`. A
+  `--grant-read-uri-permission` from `am` (shell or root) doesn't give the app access
+  (`SecurityException ... has no access to content://media/...`). A real share comes
+  with the sender's grant. The mapping itself is unit-tested (`SharedPathsTest`).
+- `ShareActivity` has `taskAffinity=""`. Otherwise a share started with `NEW_TASK`
+  became the root of the terminal's task, and the next identical share only brought
+  that task to the front (no new activity).
+- Reading the clipboard with `service call clipboard` as root **clears it** ("Could
+  not grant permission to primary clip. Clearing clipboard"). Check a clip by pasting
+  into the terminal instead.
+- Docker's fake `/system/bin/am` must only use mksh builtins (`print -r`): the Android
+  `PATH` in the chroot has no `printf`.
 
 ## One file: APK + root module + Magisk recovery zip
 
@@ -329,8 +382,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 24 files, guard 13/13, Docker
-  90/90 (Phase 1 result: 17 files, 13/13, 70/70).
+- `tests/run-all.sh`: everything below. Now: shellcheck 27 files, guard 13/13, Docker
+  116/116 (Phase 1 result: 17 files, 13/13, 70/70).
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
 - `tests/test_reset_guard.sh`: critical rule with dummy dirs, a fake mounts table and a

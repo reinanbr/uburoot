@@ -9,6 +9,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Android bridge: `uburoot-notify`, `uburoot-toast`, `uburoot-vibrate`, `uburoot-clip` and
+  `uburoot-open` (also installed as `xdg-open`) inside Ubuntu. They reach the app through a
+  receiver guarded by a signature permission.
+- *Open in UbuRoot* share target: a new session in the shared file's folder (files from
+  outside the shared storage are copied to `~/Shared`).
 - Several terminal sessions in tabs, kept alive by a foreground service. Its notification
   shows the number of sessions and has *New session*, *Stop all* and a wake-lock toggle.
 - Extra keys (ESC, CTRL, ALT, TAB, arrows, HOME/END, PgUp/PgDn, `/ - | ~`), themes (dark,

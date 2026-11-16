@@ -78,9 +78,23 @@ Available now:
   DNS servers, *Repair mounts*, and *Reset Ubuntu*, which asks you to type a
   confirmation word and never deletes anything while something is still mounted.
 
+- **Talk to Android from Ubuntu**:
+
+  | Command | Does |
+  |---------|------|
+  | `uburoot-notify TITLE [TEXT]` | shows an Android notification (e.g. `make; uburoot-notify "build done"`) |
+  | `uburoot-toast TEXT` | shows a short message |
+  | `uburoot-vibrate [MS]` | vibrates (default 300 ms) |
+  | `uburoot-clip [TEXT]` | copies TEXT, or its input (`git log -1 \| uburoot-clip`), to Android's clipboard |
+  | `uburoot-open FILE\|URL`, `xdg-open` | opens a file or a link in an Android app |
+
+  They work in the background too. Files are read with your own permissions, so you can
+  only open what you can read.
+- **Open in UbuRoot**: share a file from any app to open a session in its folder. Files
+  outside the phone's shared storage are copied to `~/Shared` first.
+
 Planned (see the roadmap in [CLAUDE.md](CLAUDE.md#phase-status)):
 
-- `uburoot-*` commands to talk to Android (share, open, notify...);
 - start at boot through the module (e.g. run `sshd` at boot).
 
 ## Requirements

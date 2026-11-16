@@ -530,6 +530,22 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   screen starts it. `LocationListener`'s other methods are abstract before API 30, so the
   listener implements all four. Sensors above 200 Hz need `HIGH_SAMPLING_RATE_SENSORS`
   (Android 12+): capped at 200.
+- **Phase 3b bridges, device test (CI release APK of `4088af0`, S9, 2026-11-16).**
+  Turning each bridge on asked for its permission ("While using the app") and
+  published `/run/uburoot-bridge/{audio,camera,sensors,location}` (groups audio 1005,
+  camera 1006, `uburoot-sensors`/`uburoot-location` created by `groupadd -r`: 988/996).
+  As root inside Ubuntu: 30 sensors, `read accelerometer` (4 fields), `stream … 50`
+  gave 100 lines in 2 s; cameras 0 back, 1 and 2 front; `snap` 640x480 in 3.2 s
+  (valid JPEG); 1 s 440 Hz tone played; 2 s of microphone = 172032 bytes, not silent;
+  NMEA flowed indoors ($GPGSV only, no fix). uid 9000 with gid 1005 was served, without
+  it got "Permission denied … grant", a wrong token got `ERR refused`. **With the app in
+  the background (HOME)** camera, microphone (peak 1526, not zeroed), sensors and NMEA
+  kept working (the foreground service types). The front camera's frames came with
+  the HAL's whole buffer (~1.6 MB of zeros after EOI at 640x480; the back camera's
+  ended at `FF D9`), so frames are cut after the last EOI (`Bridges.jpegOnly`).
+  Gadget NCM from the screen (dialog → host sees NCM + ADB, 1 change), then *Stop all*
+  from the menu: BridgeService and SessionService gone, 0 mounts under the rootfs,
+  gadget ADB only, 0 changes, token files gone.
 - **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
   S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
   the archive signatures anyway). The app copies a SAF file into its cache, then

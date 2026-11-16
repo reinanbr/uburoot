@@ -178,6 +178,20 @@ object Bridges {
             ?.sortedByDescending { it.width.toLong() * it.height }
             .orEmpty()
 
+    /**
+     * Some HALs hand over the whole JPEG buffer, padding included: on the S9 the front
+     * camera's 640x480 frames came as ~1.6 MB, zeros after the image. Cut after the
+     * last EOI marker (FF D9); the padding has none.
+     */
+    internal fun jpegOnly(a: ByteArray): ByteArray {
+        val n = a.size
+        if (n >= 2 && a[n - 2] == 0xFF.toByte() && a[n - 1] == 0xD9.toByte()) return a
+        for (i in n - 2 downTo 2) {
+            if (a[i] == 0xFF.toByte() && a[i + 1] == 0xD9.toByte()) return a.copyOf(i + 2)
+        }
+        return a
+    }
+
     private fun camera(ctx: Context, r: BridgeRequest) {
         val cm = ctx.getSystemService(CameraManager::class.java)
         when (r.cmd) {
@@ -223,7 +237,7 @@ object Bridges {
         reader.setOnImageAvailableListener({ rd ->
             rd.acquireLatestImage()?.use { img ->
                 val b = img.planes[0].buffer
-                val a = ByteArray(b.remaining()).also { b.get(it) }
+                val a = jpegOnly(ByteArray(b.remaining()).also { b.get(it) })
                 if (!frames.offer(a)) {
                     frames.poll()
                     frames.offer(a)

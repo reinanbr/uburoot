@@ -23,11 +23,20 @@
 #   wakelock on|off            keep the phone from suspending
 #   set PATH VALUE             an LED (/sys/class/leds/NAME/brightness|trigger)
 #   allow NODE                 a bus node (i2c, spi, gpiochip) for group uburoot-bus
+#   gadget [status]            the phone's USB gadget and its functions
+#   gadget on ncm|acm|hid      add a function next to Android's (adb stays):
+#                              USB network, serial (/dev/ttyGS*), keyboard+mouse
+#   gadget on storage IMAGE [rw]  an image file as a USB disk (read-only unless rw;
+#                              never a block device)
+#   gadget off                 remove them (Stop all does it too)
+#   bridge status|publish NAME SOCKET|unpublish NAME|all
+#                              the app's bridges (audio camera sensors location);
+#                              publish reads the token on stdin (used by the app)
 #   apply                      apply the permission rules once (root)
 #   watch                      apply them every 2 s (started by mount.sh / grant)
 #   -y                         don't ask for confirmation (the app asks)
 # Classes: gpu input uinput audio camera usb serial hidraw wifi bluetooth nfc
-#          sensors leds power cpu thermal buses modem
+#          sensors location leds power cpu thermal buses modem
 #
 # Safety floor (no option changes it): thermal trips, charger and battery settings
 # and voltages are read-only; PMIC/charger/regulator bus nodes are refused; the
@@ -98,7 +107,7 @@ in_ubuntu() {
 # --- Classes --------------------------------------------------------------------------
 # class_def CLASS sets: NODES (globs), GROUP (name:gid, empty = root only),
 # RULE (1 = UbuRoot sets group+mode on new nodes), ROUTE, NOTE.
-CLASSES="gpu input uinput audio camera usb serial hidraw wifi bluetooth nfc sensors leds power cpu thermal buses modem"
+CLASSES="gpu input uinput audio camera usb serial hidraw wifi bluetooth nfc sensors location leds power cpu thermal buses modem"
 class_def() {
     NODES=""
     GROUP=""
@@ -125,13 +134,13 @@ class_def() {
             NODES="/dev/snd/*"
             GROUP=aid_audio:1005
             ROUTE=bridge
-            NOTE="audioserver and the audio HAL hold the sound card; the bridge to Android audio (PulseAudio/PipeWire) and the ALSA takeover are Phase 3b. USB audio cards appear here too."
+            NOTE="audioserver and the audio HAL hold the sound card. The app's bridge: uburoot-audio play|record|pulse (Hardware > Bridges). USB audio cards appear here and work directly (ALSA)."
             ;;
         camera)
             NODES="/dev/video* /dev/media* /dev/v4l-subdev*"
             GROUP=aid_camera:1006
             ROUTE=bridge
-            NOTE="Vendor camera drivers need the camera HAL: plain V4L2 tools can't drive them. The Camera2 bridge is Phase 3b."
+            NOTE="Vendor camera drivers need the camera HAL: plain V4L2 tools can't drive them. The app's Camera2 bridge: uburoot-camera list|snap|mjpeg (Hardware > Bridges). No v4l2loopback: unsigned modules can't load here."
             ;;
         usb)
             NODES="/dev/bus/usb/*/*"
@@ -167,7 +176,13 @@ class_def() {
             ;;
         sensors)
             ROUTE=bridge
-            NOTE="Direct only when the sensors are on the kernel's IIO bus (/sys/bus/iio). Otherwise the SensorManager/LocationManager bridge is Phase 3b."
+            GROUP=uburoot-sensors:
+            NOTE="Direct only when the sensors are on the kernel's IIO bus (/sys/bus/iio). Otherwise the app's SensorManager bridge: uburoot-sensors list|read|stream (Hardware > Bridges)."
+            ;;
+        location)
+            ROUTE=bridge
+            GROUP=uburoot-location:
+            NOTE="The GNSS receiver belongs to Android's location HAL. The app's LocationManager bridge: uburoot-gps nmea|fix (Hardware > Bridges), e.g. for gpsd."
             ;;
         leds)
             ROUTE=direct
@@ -255,6 +270,7 @@ class_state() { # CLASS -> available|missing|taken|unsupported
             if [ -n "$(ls "$HW/sys/bus/iio/devices" 2>/dev/null)" ]; then say available; else say bridge; fi
             return
             ;;
+        location) say bridge; return ;;
     esac
     if [ -n "$(nodes "$1" | head -n 1)" ]; then say available; else say missing; fi
 }
@@ -365,14 +381,20 @@ start_watch() {
     watch_running && return 0
     [ -s "$RULES" ] || return 0
     if [ "$MODE" = android ]; then
-        bb chroot "$RF" /usr/bin/env -i PATH=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
-            /usr/local/sbin/uburoot-hw watch </dev/null >/dev/null 2>&1 &
+        # exec first: see mount.sh (bb is a function; its saved fds would stay open).
+        (
+            exec </dev/null >/dev/null 2>&1
+            bb chroot "$RF" /usr/bin/env -i PATH=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+                /usr/local/sbin/uburoot-hw watch
+        ) &
     else
         "$0" watch </dev/null >/dev/null 2>&1 &
     fi
 }
 watch_loop() {
     need_access
+    # One watcher: mount.sh starts one on every mount (every new session).
+    if watch_running; then exit 0; fi
     mkdir -p "${PIDFILE%/*}"
     printf '%s\n' "$$" >"$PIDFILE"
     while [ -s "$RULES" ]; do
@@ -572,6 +594,222 @@ allow_node() { # NODE
 }
 
 # --- Reports ------------------------------------------------------------------------------
+# ---- USB gadget (configfs) ----
+# Android's gadget (g1 on the S9) stays as it is: our functions are added next to
+# its own (adb keeps working) and removed again by "gadget off" / Stop all.
+GADGET_FUNCS="ncm acm hid storage"
+bound_gadget() { # -> the gadget directory bound to a controller
+    _gr=$(gadget_root) || return 1
+    if _r=$(rec_get takeover gadget); then
+        echo "$_gr/${_r%%:*}"
+        return 0
+    fi
+    for _d in "$_gr"/*; do
+        [ -d "$_d" ] || continue
+        if [ -n "$(cat "$_d/UDC" 2>/dev/null)" ]; then
+            echo "$_d"
+            return 0
+        fi
+    done
+    return 1
+}
+gadget_config() { # GADGET -> its first configuration
+    for _c in "$1"/configs/*; do
+        if [ -d "$_c" ]; then
+            echo "$_c"
+            return 0
+        fi
+    done
+    return 1
+}
+hid_desc() { # FILE kbd|mouse: one write (configfs keeps only the last one)
+    _t="$STATE/.hid.$$"
+    if [ "$2" = kbd ]; then
+        printf '\005\001\011\006\241\001\005\007\031\340\051\347\025\000\045\001\165\001\225\010\201\002\225\001\165\010\201\003\225\005\165\001\005\010\031\001\051\005\221\002\225\001\165\003\221\003\225\006\165\010\025\000\045\145\005\007\031\000\051\145\201\000\300' >"$_t"
+    else
+        printf '\005\001\011\002\241\001\011\001\241\000\005\011\031\001\051\003\025\000\045\001\225\003\165\001\201\002\225\001\165\005\201\003\005\001\011\060\011\061\011\070\025\201\045\177\165\010\225\003\201\006\300\300' >"$_t"
+    fi
+    cat "$_t" >"$1"
+    _rc=$?
+    rm -f "$_t"
+    return "$_rc"
+}
+gadget_inst() { # GADGET TYPE -> an instance of TYPE: Android's own, else ours (created)
+    for _d in "$1"/functions/"$2".*; do
+        if [ -d "$_d" ]; then
+            echo "${_d##*/}"
+            return 0
+        fi
+    done
+    mkdir "$1/functions/$2.uburoot" 2>/dev/null || return 1
+    echo "$2.uburoot"
+}
+gadget_fn() { # GADGET FUNC [IMAGE [rw]] -> instance names (never removed: see changes.sh)
+    case "$2" in
+        ncm | acm) gadget_inst "$1" "$2" ;;
+        storage)
+            _f=$(gadget_inst "$1" mass_storage) || return 1
+            _d="$1/functions/$_f"
+            if [ -n "$(cat "$_d/lun.0/file" 2>/dev/null)" ] && [ ! -L "$(gadget_config "$1")/uburoot.storage" ]; then
+                say "$_f already exports a file for Android" >&2
+                return 1
+            fi
+            _ro=1
+            [ "${4:-}" = rw ] && _ro=0
+            if ! { wr "$_ro" "$_d/lun.0/ro" && wr 1 "$_d/lun.0/removable" && wr "$3" "$_d/lun.0/file"; }; then
+                return 1
+            fi
+            echo "$_f"
+            ;;
+        hid)
+            for _h in kbd mouse; do
+                _d="$1/functions/hid.uburoot$_h"
+                if [ ! -d "$_d" ]; then
+                    mkdir "$_d" || return 1
+                    # Boot protocol: 1 = keyboard (8-byte reports), 2 = mouse (4 bytes).
+                    _p=1
+                    _n=8
+                    if [ "$_h" = mouse ]; then
+                        _p=2
+                        _n=4
+                    fi
+                    if ! { wr "$_p" "$_d/protocol" && wr 1 "$_d/subclass" && wr "$_n" "$_d/report_length"; }; then
+                        return 1
+                    fi
+                    hid_desc "$_d/report_desc" "$_h" || return 1
+                fi
+                echo "hid.uburoot$_h"
+            done
+            ;;
+        *) return 1 ;;
+    esac
+}
+gadget_on() { # FUNC [IMAGE [rw]]
+    need_access
+    case " $GADGET_FUNCS " in *" $1 "*) ;; *) die "usage: uburoot-hw gadget on ncm|acm|hid|storage IMAGE [rw]" ;; esac
+    if [ "$1" = storage ]; then
+        [ -n "${2:-}" ] || die "usage: uburoot-hw gadget on storage IMAGE [rw]"
+        case "$2" in
+            /dev/* | /proc/* | /sys/*) die "only an image file: block devices are never exported" ;;
+            /*) ;;
+            *) die "IMAGE must be an absolute path" ;;
+        esac
+        if [ ! -f "$2" ] || [ -L "$2" ]; then die "$2 is not a regular file"; fi
+    fi
+    lock
+    _g=$(bound_gadget) || die "no USB gadget is bound to a controller (no configfs gadget, or Ubuntu without Kernel access)"
+    _cfg=$(gadget_config "$_g") || die "${_g##*/} has no configuration"
+    if [ -L "$_cfg/uburoot.$1" ] || [ -L "$_cfg/uburoot.${1}kbd" ]; then
+        say "gadget: $1 is already on"
+        return 0
+    fi
+    _udc=""
+    if _r=$(rec_get takeover gadget); then _udc=${_r#*:}; fi
+    [ -n "$_udc" ] || _udc=$(cat "$_g/UDC")
+    [ -n "$_udc" ] || die "${_g##*/} is not bound"
+    confirm "Add $1 to the phone's USB gadget (${_g##*/})? USB disconnects for a moment; adb comes back."
+    rec_add takeover gadget "${_g##*/}:$_udc"
+    wr "" "$_g/UDC" 2>/dev/null
+    _ok=1
+    _fns=$(gadget_fn "$_g" "$@") || _ok=0
+    for _f in $_fns; do
+        # uburoot.ncm, uburoot.acm, uburoot.storage, uburoot.hidkbd, uburoot.hidmouse
+        _n=""
+        case "$_f" in hid.uburoot*) _n=${_f#hid.uburoot} ;; esac
+        ln -s "$_g/functions/$_f" "$_cfg/uburoot.$1$_n" 2>/dev/null || _ok=0
+    done
+    [ -n "$_fns" ] || _ok=0
+    if [ "$_ok" = 0 ] || ! gadget_bind "$_g" "$_udc"; then
+        gadget_release "${_g##*/}:$_udc"
+        rec_del takeover gadget
+        die "the kernel refused gadget $1; the gadget is back as it was"
+    fi
+    gadget_show
+}
+gadget_off() {
+    need_root
+    lock
+    _r=$(rec_get takeover gadget) || { say "gadget: no UbuRoot functions"; return 0; }
+    gadget_release "$_r" || die "could not restore the USB gadget ($_r)"
+    rec_del takeover gadget
+    say "gadget: UbuRoot functions removed, ${_r%%:*} bound to ${_r#*:} again"
+}
+gadget_show() {
+    _g=$(bound_gadget) || { say "gadget: none (no configfs USB gadget here)"; return 0; }
+    _cfg=$(gadget_config "$_g")
+    say "gadget: ${_g##*/} on $(cat "$_g/UDC" 2>/dev/null) ($(cat "$_g/idVendor" 2>/dev/null):$(cat "$_g/idProduct" 2>/dev/null))"
+    for _l in "$_cfg"/*; do
+        [ -L "$_l" ] || continue
+        _f=$(readlink "$_l")
+        _f=${_f##*/}
+        case "${_l##*/}" in uburoot.*) _o="UbuRoot" ;; *) _o="Android" ;; esac
+        _x=""
+        case "$_f" in
+            ncm.*) _x=" interface $(cat "$_g/functions/$_f/ifname" 2>/dev/null) (configure it with ip)" ;;
+            acm.*) _x=" /dev/ttyGS$(cat "$_g/functions/$_f/port_num" 2>/dev/null)" ;;
+            hid.*) _x=" $(bb awk -F: '{ print "/dev/hidg" $2 }' "$_g/functions/$_f/dev" 2>/dev/null)" ;;
+            mass_storage.*) _x=" $(cat "$_g/functions/$_f/lun.0/file" 2>/dev/null) ro=$(cat "$_g/functions/$_f/lun.0/ro" 2>/dev/null)" ;;
+        esac
+        say "  $_o: $_f$_x"
+    done
+}
+gadget_cmd() {
+    need_root
+    _sub=${1:-status}
+    [ $# -gt 0 ] && shift
+    case "$_sub" in
+        status) gadget_show ;;
+        on) [ $# -ge 1 ] || die "usage: uburoot-hw gadget on ncm|acm|hid|storage IMAGE [rw]"; gadget_on "$@" ;;
+        off) gadget_off ;;
+        *) die "usage: uburoot-hw gadget [status|on FUNC|off]" ;;
+    esac
+}
+
+# ---- Bridges served by the app (BridgeService) ----
+# The app passes each bridge's abstract socket name and its token (on stdin, never in
+# argv); they go to /run/uburoot-bridge/NAME, readable by root and the class's group.
+BRIDGES="audio camera sensors location"
+BRDIR="$RF/run/uburoot-bridge"
+bridge_cmd() {
+    need_root
+    case "${1:-}" in
+        publish)
+            [ $# = 3 ] || die "usage: hardware.sh bridge publish NAME SOCKET (token on stdin)"
+            need_access
+            case " $BRIDGES " in *" $2 "*) ;; *) die "unknown bridge: $2" ;; esac
+            case "$3" in uburoot.[0-9a-f]*."$2") ;; *) die "bad socket name: $3" ;; esac
+            read -r _tok || die "no token on stdin"
+            case "$_tok" in '' | *[!0-9a-f]*) die "bad token" ;; esac
+            if [ "$MODE" = android ] && ! ubu_is_mounted "$RF/run"; then die "Ubuntu is not mounted"; fi
+            class_def "$2"
+            _grp=$(ensure_group "$GROUP") || die "cannot create group ${GROUP%%:*}"
+            _gid=$(bb awk -F: -v g="$_grp" '$1 == g { print $3; exit }' "$RF/etc/group")
+            if ! { mkdir -p "$BRDIR" && chmod 755 "$BRDIR"; }; then die "cannot create $BRDIR"; fi
+            _t="$BRDIR/.$2.$$"
+            (umask 077 && printf 'socket=%s\ntoken=%s\n' "$3" "$_tok" >"$_t") || die "cannot write $_t"
+            if ! { chown "0:$_gid" "$_t" && chmod 640 "$_t" && mv -f "$_t" "$BRDIR/$2"; }; then
+                rm -f "$_t"
+                die "cannot publish $2"
+            fi
+            say "bridge $2: readable by root and group $_grp"
+            ;;
+        unpublish)
+            [ $# = 2 ] || die "usage: hardware.sh bridge unpublish NAME|all"
+            if [ "$2" = all ]; then
+                for _b in $BRIDGES; do rm -f "$BRDIR/$_b"; done
+            else
+                case " $BRIDGES " in *" $2 "*) rm -f "$BRDIR/$2" ;; *) die "unknown bridge: $2" ;; esac
+            fi
+            ;;
+        status | "")
+            for _b in $BRIDGES; do
+                if [ -f "$BRDIR/$_b" ]; then say "bridge=$_b|on"; else say "bridge=$_b|off"; fi
+            done
+            ;;
+        *) die "usage: hardware.sh bridge publish|unpublish|status" ;;
+    esac
+}
+
 list() {
     printf '%-10s %-9s %-11s %s\n' CLASS ROUTE STATE "NODES / USED BY"
     for _c in $CLASSES; do
@@ -646,6 +884,17 @@ status() {
     [ -d "$_b" ] && say "battery=$(cat "$_b/capacity" 2>/dev/null)|$(cat "$_b/status" 2>/dev/null)|$(cat "$_b/temp" 2>/dev/null)"
     if rec_get wakelock uburoot_hw >/dev/null 2>&1; then say "wakelock=on"; else say "wakelock=off"; fi
     if watch_running; then say "rules=running"; elif [ -s "$RULES" ]; then say "rules=stopped"; else say "rules=none"; fi
+    for _b in $BRIDGES; do
+        if [ -f "$BRDIR/$_b" ]; then say "bridge=$_b|on"; else say "bridge=$_b|off"; fi
+    done
+    # gadget=FUNCS|BOUND: UbuRoot's functions in the phone's USB gadget (empty: none).
+    _gf=""
+    if _g=$(bound_gadget 2>/dev/null) && _c=$(gadget_config "$_g"); then
+        for _l in "$_c"/uburoot.*; do [ -L "$_l" ] && _gf="$_gf${_gf:+,}${_l##*/uburoot.}"; done
+        say "gadget=$_gf|$(cat "$_g/UDC" 2>/dev/null)"
+    else
+        say "gadget=|none"
+    fi
     say "changes=$(rec_count)"
 }
 
@@ -682,5 +931,7 @@ case "$_cmd" in
         apply
         ;;
     watch) watch_loop ;;
+    gadget) gadget_cmd "$@" ;;
+    bridge) bridge_cmd "$@" ;;
     *) die "unknown command: $_cmd" ;;
 esac

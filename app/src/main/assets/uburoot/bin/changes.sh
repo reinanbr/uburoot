@@ -15,7 +15,9 @@
 #   file PATH VALUE          a sysfs file (CPU governor, LED brightness...)
 #   node PATH UID:GID:MODE   owner and mode of a device node
 #   wakelock NAME -          a kernel wake lock held through UbuRoot
-#   takeover CLASS STATE     a device taken from Android (e.g. wifi 1:1)
+#   takeover CLASS STATE     a device taken from Android (wifi 1:1) or changed
+#                            (gadget g1:a600000.dwc3: our functions in Android's
+#                            USB gadget, and the controller it was bound to)
 # Only the first change of a setting is recorded: that holds the true original.
 # Nothing persists across reboots: a log from an earlier boot is discarded.
 
@@ -131,6 +133,54 @@ wifi_release() { # STATE
     return "$_ok"
 }
 
+# The USB gadget (configfs). UbuRoot links function instances into the config of the
+# gadget Android has bound (as uburoot.*, next to adb's f1). It NEVER removes an
+# instance (rmdir): on the S9, rmdir of an ncm instance hits a kernel bug
+# (ncm_free_inst NULL dereference in configfs_rmdir) and the phone panics. So it uses
+# Android's own instances (ncm.0, acm.0, mass_storage.0); one it had to create
+# (hid.uburoot*) stays, unlinked and inert, until the next reboot.
+gadget_root() {
+    if [ -n "${UBU_GADGET_DIR:-}" ]; then
+        echo "$UBU_GADGET_DIR"
+        return 0
+    fi
+    for _d in /config/usb_gadget /sys/kernel/config/usb_gadget; do
+        if [ -d "$_d" ]; then
+            echo "$_d"
+            return 0
+        fi
+    done
+    return 1
+}
+# Bind GADGET to UDC. Unbinding makes adbd restart its FunctionFS endpoints, and init
+# then binds the gadget itself ("write UDC" in init.usb.configfs.rc); either way it
+# ends bound to UDC. EBUSY = already bound.
+gadget_bind() { # GADGET_DIR UDC
+    _i=0
+    while [ "$_i" -lt 10 ]; do
+        [ "$(cat "$1/UDC" 2>/dev/null)" = "$2" ] && return 0
+        wr "$2" "$1/UDC" 2>/dev/null
+        sleep 1
+        _i=$((_i + 1))
+    done
+    [ "$(cat "$1/UDC" 2>/dev/null)" = "$2" ]
+}
+# Unbind, remove our links (eject an image first), bind the original controller again.
+gadget_release() { # GADGET:UDC
+    _gr=$(gadget_root) || return 1
+    _g="$_gr/${1%%:*}"
+    _u=${1#*:}
+    [ -d "$_g" ] || return 1
+    wr "" "$_g/UDC" 2>/dev/null
+    for _l in "$_g"/configs/*/uburoot.*; do
+        [ -L "$_l" ] || continue
+        _f=$(readlink "$_l")
+        if [ -f "$_g/functions/${_f##*/}/lun.0/file" ]; then wr "" "$_g/functions/${_f##*/}/lun.0/file" 2>/dev/null; fi
+        rm -f "$_l"
+    done
+    gadget_bind "$_g" "$_u"
+}
+
 revert_one() { # TYPE NAME VALUE -> 0 if undone
     case "$1" in
         module)
@@ -173,6 +223,7 @@ revert_one() { # TYPE NAME VALUE -> 0 if undone
         takeover)
             case "$2" in
                 wifi) wifi_release "$3" || { say "could not give Wi-Fi back to Android" >&2; return 1; } ;;
+                gadget) gadget_release "$3" || { say "could not restore the USB gadget ($3)" >&2; return 1; } ;;
                 *) say "unknown takeover $2" >&2 ;;
             esac
             ;;

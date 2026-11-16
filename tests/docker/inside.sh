@@ -577,6 +577,13 @@ echo 0-3 >$H/sys/devices/system/cpu/online
 echo 0 >$H/sys/class/leds/test/brightness
 : >$H/power/wake_lock; : >$H/power/wake_unlock
 echo 1 >$H/wifi/enabled; echo 1 >$H/wifi/scan
+# A configfs gadget like the S9's: g1 bound, adb linked as f1, Android's instances.
+GD=$H/gadget/g1
+mkdir -p $GD/configs/b.1 $GD/functions/ffs.adb $GD/functions/ncm.0 $GD/functions/acm.0 $GD/functions/mass_storage.0/lun.0
+echo dummy_udc.0 >$GD/UDC; echo usb0 >$GD/functions/ncm.0/ifname; echo 0 >$GD/functions/acm.0/port_num
+: >$GD/functions/mass_storage.0/lun.0/file; echo 1 >$GD/functions/mass_storage.0/lun.0/ro
+ln -s /tmp/hw/gadget/g1/functions/ffs.adb $GD/configs/b.1/f1
+dd if=/dev/zero of=$H/disk.img bs=1024 count=64 2>/dev/null
 cat >$H/acmd <<'EOF2'
 #!/bin/sh
 # Fake Android tools: cmd wifi, settings (state in $UBU_FAKE_WIFI).
@@ -594,15 +601,15 @@ EOF2
 chmod 755 $H/acmd
 echo boot-3 >$K/boot_id
 hin() { # uburoot-hw inside Ubuntu
-    chroot $R env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi \
+    chroot $R env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi UBU_GADGET_DIR=/tmp/hw/gadget \
         UBU_BOOT_ID_FILE=/tmp/k/boot_id /usr/local/sbin/uburoot-hw "$@"
 }
 hout() { # hardware.sh on the Android side
-    env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi \
+    env UBU_HW_ROOT=/tmp/hw UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi UBU_GADGET_DIR=/tmp/hw/gadget \
         UBU_BOOT_ID_FILE=$K/boot_id /system/bin/sh $B/hardware.sh "$@"
 }
 kout2() { # Stop all's revert, with the fakes the hardware records need
-    env UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi UBU_BOOT_ID_FILE=$K/boot_id \
+    env UBU_POWER_DIR=/tmp/hw/power UBU_ACMD=/tmp/hw/acmd UBU_FAKE_WIFI=/tmp/hw/wifi UBU_GADGET_DIR=/tmp/hw/gadget UBU_BOOT_ID_FILE=$K/boot_id \
         UBU_SYSCTL_DIR=$K/sys UBU_SELINUX_ENFORCE=$K/enforce UBU_PROC_MODULES=$K/modules UBU_RMMOD=$K/rmmod \
         /system/bin/sh $B/kernel.sh "$@"
 }
@@ -655,7 +662,7 @@ h_release() {
     sleep 1
     running 'wpa_supplicant [-]c' || return 1
     hin release wifi >/dev/null && sleep 1 && [ "$(cat $H/wifi/enabled)$(cat $H/wifi/scan)" = 11 ] &&
-        ! grep -q '^takeover' $CH && ! running 'wpa_supplicant [-]c'
+        ! grep -q '^takeover wifi' $CH && ! running 'wpa_supplicant [-]c'
 }
 check "uburoot-hw status (Ubuntu side)" h_status
 check "grant serial: group dialout, existing node 0660, original recorded" h_grant
@@ -673,6 +680,29 @@ check "LED brightness recorded" h_led
 check "only LED files can be set (no battery/charger knobs)" h_ledbad
 check "a PMIC/charger bus node is refused" h_pmic
 check "a bus node opened to uburoot-bus" h_bus
+h_gon() {
+    hin -y gadget on ncm >/dev/null && hin -y gadget on acm >/dev/null &&
+        [ "$(readlink $GD/configs/b.1/uburoot.ncm)" = /tmp/hw/gadget/g1/functions/ncm.0 ] &&
+        [ -L $GD/configs/b.1/uburoot.acm ] && [ -L $GD/configs/b.1/f1 ] &&
+        [ "$(cat $GD/UDC)" = dummy_udc.0 ] && grep -qx 'takeover gadget g1:dummy_udc.0' $CH
+}
+h_ghid() {
+    hin -y gadget on hid >/dev/null && [ -L $GD/configs/b.1/uburoot.hidkbd ] && [ -L $GD/configs/b.1/uburoot.hidmouse ] &&
+        [ "$(wc -c <$GD/functions/hid.uburootkbd/report_desc)" = 63 ] &&
+        [ "$(wc -c <$GD/functions/hid.uburootmouse/report_desc)" = 52 ] &&
+        [ "$(cat $GD/functions/hid.uburootkbd/protocol)" = 1 ] && [ "$(cat $GD/functions/hid.uburootmouse/report_length)" = 4 ]
+}
+h_gdev() { ! hin -y gadget on storage /dev/sda 2>/dev/null && ! hin -y gadget on storage tmp/x.img 2>/dev/null; }
+h_gdisk() {
+    hin -y gadget on storage /tmp/hw/disk.img >/dev/null && [ "$(cat $GD/functions/mass_storage.0/lun.0/file)" = /tmp/hw/disk.img ] &&
+        [ "$(cat $GD/functions/mass_storage.0/lun.0/ro)" = 1 ] && [ -L $GD/configs/b.1/uburoot.storage ]
+}
+h_gstatus() { hin gadget status | grep -q 'UbuRoot: ncm.0 interface usb0' && hin gadget status | grep -q 'Android: ffs.adb'; }
+check "gadget on ncm, acm: Android's instances linked next to adb, recorded" h_gon
+check "gadget on hid: keyboard (63-byte) and mouse (52-byte) descriptors" h_ghid
+check "gadget storage refuses a device node and a relative path" h_gdev
+check "gadget storage: the image, read-only by default" h_gdisk
+check "gadget status names Android's and UbuRoot's functions" h_gstatus
 check "takeover wifi: Android Wi-Fi and scanning off, recorded" h_take
 check "release wifi: restored, Ubuntu's wpa_supplicant stopped" h_release
 hin -y takeover wifi >/dev/null 2>&1
@@ -681,6 +711,67 @@ h_seen() { hout status | grep -q '^changes=[1-9]'; }
 h_taken() { hout status | grep -q '^class=wifi|takeover|taken|'; }
 check "Android side sees the hardware changes" h_seen
 check "Android side: wifi taken" h_taken
+# Bridges: the token file, and the client against a fake app (perl, abstract socket).
+SOCK=uburoot.0123abcd.audio
+h_pub() {
+    echo feedbeef | hout bridge publish audio $SOCK >/dev/null &&
+        [ "$(stat -c '%u %g %a' $R/run/uburoot-bridge/audio)" = "0 1005 640" ] &&
+        grep -qx "socket=$SOCK" $R/run/uburoot-bridge/audio && grep -qx token=feedbeef $R/run/uburoot-bridge/audio &&
+        hout status | grep -qx 'bridge=audio|on'
+}
+h_badpub() {
+    ! echo feedbeef | hout bridge publish audio uburoot.x.camera 2>/dev/null &&
+        ! echo 'feed beef' | hout bridge publish camera uburoot.01.camera 2>/dev/null &&
+        ! echo feedbeef | hout bridge publish disk uburoot.01.disk 2>/dev/null
+}
+cat >$R/tmp/fake-app.pl <<'EOF'
+use Socket;
+socket(my $l, AF_UNIX, SOCK_STREAM, 0) or die; bind($l, pack_sockaddr_un("\0$ARGV[0]")) or die "bind: $!"; listen($l, 5);
+open(my $r, '>', '/tmp/fake-app.ready'); close $r;
+for (1 .. 3) {
+    accept(my $c, $l) or die;
+    my $line = '';
+    while (sysread($c, my $ch, 1)) { last if $ch eq "\n"; $line .= $ch; }
+    my ($t, $cmd, @a) = split / /, $line;
+    if ($t ne 'feedbeef') { syswrite($c, "ERR refused\n"); close $c; next; }
+    if ($cmd eq 'record') { syswrite($c, "OK\nPCM:@a"); close $c; next; }
+    syswrite($c, "OK\n");
+    my $all = '';
+    while (sysread($c, my $b, 4096)) { $all .= $b; }
+    open(my $f, '>', '/tmp/played'); print $f "@a:$all"; close $f; close $c;
+}
+EOF
+rm -f $R/tmp/fake-app.ready $R/tmp/played
+chroot $R timeout 60 perl /tmp/fake-app.pl $SOCK &
+for _i in 1 2 3 4 5 6 7 8 9 10; do [ -f $R/tmp/fake-app.ready ] && break; sleep 1; done
+h_rec() { [ "$($B/enter.sh root 'UBU_RATE=16000 uburoot-audio record' 2>/dev/null)" = "PCM:16000 1" ]; }
+h_play() { $B/enter.sh root 'printf abc | uburoot-audio play' && [ "$(cat $R/tmp/played)" = "48000 2:abc" ]; }
+h_badtok() {
+    sed -i s/token=feedbeef/token=0bad/ $R/run/uburoot-bridge/audio
+    out=$($B/enter.sh root 'uburoot-audio record' 2>&1) && return 1
+    printf '%s' "$out" | grep -q refused
+}
+h_nouser() {
+    out=$($B/enter.sh tester 'uburoot-audio record' 2>&1) && return 1
+    printf '%s' "$out" | grep -q 'grant'
+}
+h_unpub() { hout bridge unpublish all && [ ! -e $R/run/uburoot-bridge/audio ] && hout status | grep -qx 'bridge=audio|off'; }
+h_onewatch() {
+    _n=0
+    for _p in /proc/[0-9]*; do
+        if tr '\0' ' ' <"$_p/cmdline" 2>/dev/null | grep -q '^/bin/sh /usr/local/sbin/uburoot-hw watch'; then _n=$((_n + 1)); fi
+    done
+    [ "$_n" = 1 ]
+}
+check "bridge publish: token file 0640 root:aid_audio, in status" h_pub
+check "bridge publish refuses a bad socket name, token or bridge" h_badpub
+check "uburoot-audio record: the app's stream to stdout" h_rec
+check "uburoot-audio play: stdin to the app" h_play
+check "bridge client: the app's ERR (wrong token)" h_badtok
+check "bridge client: a user without the grant is told so" h_nouser
+check "bridge unpublish all" h_unpub
+check "sessions started no second rule watcher" h_onewatch
+check "uburoot-camera usage" sh -c "! $B/enter.sh root 'uburoot-camera snap' 2>/dev/null"
 # Stop all: umount --kill (stops the watcher too), then revert.
 $B/umount.sh --kill >/dev/null 2>&1
 check "watcher stopped by umount" h_nowatch
@@ -694,6 +785,12 @@ h_reverted() {
         [ "$(cat $H/wifi/enabled)$(cat $H/wifi/scan)" = 11 ]
 }
 check "reverted: nodes, CPU, wake lock, LED, Wi-Fi" h_reverted
+h_greverted() {
+    [ -z "$(ls -d $GD/configs/b.1/uburoot.* 2>/dev/null)" ] && [ -L $GD/configs/b.1/f1 ] &&
+        [ "$(cat $GD/UDC)" = dummy_udc.0 ] && [ -z "$(cat $GD/functions/mass_storage.0/lun.0/file)" ] &&
+        [ -d $GD/functions/ncm.0 ] && [ -d $GD/functions/hid.uburootkbd ]
+}
+check "reverted gadget: our links gone, image ejected, bound again, no instance removed" h_greverted
 check "change log empty" k_changes 0
 check "nothing left under rootfs" test "$(mounted_under $R)" = 0
 outside >/tmp/hafter.txt

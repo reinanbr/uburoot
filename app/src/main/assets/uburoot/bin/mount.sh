@@ -144,13 +144,26 @@ if [ "$KERNEL_ACCESS" = 1 ] || [ "$HARDWARE_ACCESS" = 1 ]; then
         fi
         if [ "$HARDWARE_ACCESS" = 1 ]; then
             ubu_install_tool hardware.sh "$R/usr/local/sbin/uburoot-hw" 755 || ubu_warn "cannot install uburoot-hw"
+            # The app's bridges (audio, camera, sensors, location): a perl-base client
+            # and one dispatcher behind four names.
+            ubu_install_tool bridge-client "$R/usr/local/lib/uburoot/bridge-client" 755 || ubu_warn "cannot install bridge-client"
+            ubu_install_tool hwbridge.sh "$R/usr/local/lib/uburoot/hwbridge" 755 || ubu_warn "cannot install hwbridge"
+            for _n in uburoot-audio uburoot-camera uburoot-sensors uburoot-gps; do
+                ln -sfn ../lib/uburoot/hwbridge "$R/usr/local/bin/$_n"
+            done
         fi
     fi
     # Permission rules for hotplugged devices (serial, hidraw) granted earlier.
     if [ "$HARDWARE_ACCESS" = 1 ] && [ -s "$R/etc/uburoot/hw-rules" ]; then
         "$UBU_SH" "$UBU_BIN_DIR/hardware.sh" apply >/dev/null 2>&1
-        bb chroot "$R" /usr/bin/env -i PATH=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
-            /usr/local/sbin/uburoot-hw watch </dev/null >/dev/null 2>&1 &
+        # exec first: a redirection on a function call (bb) keeps a saved copy of the
+        # caller's stdout open in the background subshell, so $(enter.sh ...) never ended.
+        # The watcher exits by itself if one is already running.
+        (
+            exec </dev/null >/dev/null 2>&1
+            bb chroot "$R" /usr/bin/env -i PATH=/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin \
+                /usr/local/sbin/uburoot-hw watch
+        ) &
     fi
 fi
 

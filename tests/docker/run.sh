@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Real-mount test suite in a privileged Docker container (root + real mounts,
 # without touching the host). Uses the x86_64 Ubuntu Base of the same LTS the
 # app installs on arm64, so apt/chroot run natively.

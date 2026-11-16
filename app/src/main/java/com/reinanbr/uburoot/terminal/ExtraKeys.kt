@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.terminal
 
 import android.view.KeyEvent

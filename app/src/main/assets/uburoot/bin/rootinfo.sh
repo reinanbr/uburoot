@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Print machine-readable facts about the root environment (key=value lines).
 # Used by the app's preflight checks; also handy via adb.
 set -u

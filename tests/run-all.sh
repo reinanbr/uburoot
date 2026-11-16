@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Phase 1 test entry point: shellcheck, critical-rule guard test, and the
 # real-mount Docker suite (skipped with a notice when Docker is unavailable).
 set -u

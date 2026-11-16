@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Hang up one terminal session, like closing a terminal window: SIGHUP (then
 # SIGCONT) to every process inside the chroot whose controlling terminal is
 # that session's pty. Processes started with nohup/setsid survive, as usual.

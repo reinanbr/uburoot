@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Remove the Ubuntu rootfs. This is the ONLY removal path, and it enforces
 # the critical rule:
 #   umount.sh --kill -> verify /proc/self/mounts has nothing under ROOTFS

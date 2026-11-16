@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs INSIDE a privileged ubuntu container (see run.sh). Builds a fake
 # Android layout with real (shared) mounts and drives the real scripts:
 #   install -> setup (real apt) -> mount (x2) -> enter -> wrappers

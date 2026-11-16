@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # UbuRoot module, late_start service (Magisk / KernelSU / APatch; runs in the
 # global mount namespace, after post-fs-data, without blocking the boot).
 #  1. Installs the app copy left by the module installer (after a recovery

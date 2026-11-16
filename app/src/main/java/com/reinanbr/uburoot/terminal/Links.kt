@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.terminal
 
 /** Finds a web link in the word the user tapped in the terminal. */

@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Post-install configuration of the Ubuntu rootfs. Safe to re-run.
 # Usage: setup.sh [options]
 #   --user NAME        create this user (with sudo)

@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Autostart at boot (Phase 5). Run by the root module's service.sh after
 # sys.boot_completed, in the global mount namespace, in the background.
 # Does nothing unless BOOT_START=1 in uburoot.conf (Settings → Start at boot).

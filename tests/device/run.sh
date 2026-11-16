@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run the on-device suite (tests/device/checks.sh) on a rooted phone via adb.
 # Pushes the current scripts first. The suite runs under nohup with a log on
 # the device, so an adb disconnect cannot SIGPIPE-kill it halfway.

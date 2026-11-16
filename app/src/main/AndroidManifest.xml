@@ -52,6 +52,11 @@
             android:exported="false"
             android:label="@string/settings_title" />
 
+        <activity
+            android:name=".ui.AboutActivity"
+            android:exported="false"
+            android:label="@string/about_title" />
+
         <!-- "Open in UbuRoot": a session in the shared file's directory. Its own
              (empty) affinity: it never becomes the root of the terminal's task,
              whose root intent would then swallow the next share. -->

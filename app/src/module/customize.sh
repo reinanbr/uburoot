@@ -1,4 +1,5 @@
 # shellcheck shell=sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Sourced by the Magisk / KernelSU / APatch module installer (not executed).
 # This zip is also the UbuRoot APK: extract only the module scripts, never
 # the app's dex/resources/libs.

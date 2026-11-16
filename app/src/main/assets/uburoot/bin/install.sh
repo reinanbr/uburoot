@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Extract an Ubuntu Base tarball into ROOTFS.
 # Usage: install.sh <ubuntu-base-*.tar.gz> [expected-sha256]
 # Checks: root, arm64, >= 3 GB free, SHA256 (when given), empty target.

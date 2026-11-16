@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Installed by android-env into the rootfs as /usr/local/lib/uburoot/uburoot-cmd;
 # /usr/local/bin/uburoot-{notify,toast,vibrate,clip,open} and xdg-open link to it.
 # Runs inside Ubuntu as any user and hands over to the root helper

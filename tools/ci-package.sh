@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Collects the built APKs into OUTDIR, each also as a "-module.zip" copy (same
 # bytes: root managers' file pickers may not list *.apk), checks that every
 # file is a signed APK that also carries the root-module files, and writes

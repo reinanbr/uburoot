@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs INSIDE the chroot as root (enter.sh root), testing what a full
 # development system needs: networking, Wi-Fi, packet-level tools, compilers,
 # runtimes, debuggers and an SSH server. User-level checks run as USER via

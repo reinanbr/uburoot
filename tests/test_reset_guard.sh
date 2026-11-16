@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Critical safety rule test, no root needed.
 # Uses dummy directories, a fake mount table (UBU_MOUNTS_FILE) and a fake
 # busybox whose umount can be sabotaged, to prove that reset.sh / ubu_safe_rm

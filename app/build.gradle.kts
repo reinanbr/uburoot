@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -118,8 +119,36 @@ abstract class ModuleFilesTask : DefaultTask() {
     }
 }
 
+/** LICENSE, NOTICE and LICENSES/ go into the APK's assets/licenses/ for the About screen. */
+abstract class LicenseAssetsTask : DefaultTask() {
+    @get:InputFiles
+    abstract val sources: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        val out = output.get().asFile.resolve("licenses")
+        out.deleteRecursively()
+        out.mkdirs()
+        for (f in sources.files) {
+            val name = if (f.name == "LICENSE") "GPL-3.0-or-later.txt" else f.name
+            f.copyTo(out.resolve(name))
+        }
+    }
+}
+
 androidComponents {
     onVariants { variant ->
+        val licenses = tasks.register<LicenseAssetsTask>("${variant.name}LicenseAssets") {
+            sources.from(
+                rootProject.file("LICENSE"),
+                rootProject.file("NOTICE"),
+                rootProject.file("LICENSES/Apache-2.0.txt"),
+            )
+        }
+        variant.sources.assets?.addGeneratedSourceDirectory(licenses, LicenseAssetsTask::output)
         val task = tasks.register<ModuleFilesTask>("${variant.name}ModuleFiles") {
             source.set(layout.projectDirectory.dir("src/module"))
             versionName.set(appVersionName)

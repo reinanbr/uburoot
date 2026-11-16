@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Unmount everything at or below ROOTFS, deepest first, reading /proc/self/mounts.
 # Falls back to lazy umount (-l). Exit 0 only if nothing is left mounted.
 # Usage: umount.sh [--kill]

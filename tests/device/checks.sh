@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs ON THE DEVICE as root in the global mount namespace (see run.sh).
 # Assumes install.sh + setup.sh --user <name> --nopasswd already ran (the
 # app's installer does that). The user is TEST_USER, else DEFAULT_USER from

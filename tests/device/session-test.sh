@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Runs INSIDE an interactive UbuRoot session, typed in the app's terminal, as
 # the default (non-root) user. It covers what only a real app session has:
 # su -> enter.sh -> setsid --ctty -> su - user, with a tty and job control.

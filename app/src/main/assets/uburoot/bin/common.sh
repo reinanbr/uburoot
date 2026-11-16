@@ -1,4 +1,5 @@
 # shellcheck shell=sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Variables defined here are consumed by the scripts that source this file.
 # shellcheck disable=SC2034
 # UbuRoot common definitions. Sourced by every script; never executed directly.

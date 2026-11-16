@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.reinanbr.uburoot.terminal
 
 import android.Manifest
@@ -64,6 +65,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.reinanbr.uburoot.R
+import com.reinanbr.uburoot.ui.AboutActivity
 import com.reinanbr.uburoot.ui.MainActivity
 import com.reinanbr.uburoot.ui.SettingsActivity
 import com.reinanbr.uburoot.ui.UbuRootTheme
@@ -276,6 +278,9 @@ class TerminalActivity : ComponentActivity() {
                     }
                     Item(R.string.action_settings) {
                         startActivity(Intent(this@TerminalActivity, SettingsActivity::class.java))
+                    }
+                    Item(R.string.about_title) {
+                        startActivity(Intent(this@TerminalActivity, AboutActivity::class.java))
                     }
                     Item(R.string.action_stop_all) { confirmStop = true }
                 }

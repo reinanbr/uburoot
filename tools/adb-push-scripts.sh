@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Push the UbuRoot scripts to a rooted device without the app:
 #   tools/adb-push-scripts.sh [-s SERIAL]
 # Then, for example:

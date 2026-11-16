@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Run shellcheck (POSIX sh dialect) on every UbuRoot script.
 # Uses shellcheck from PATH; otherwise the official koalaman/shellcheck image.
 set -eu

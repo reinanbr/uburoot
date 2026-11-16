@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Android side of the app <-> Ubuntu bridge (Phase 4). Called by the app.
 # Usage:
 #   bridge.sh take ID DEST

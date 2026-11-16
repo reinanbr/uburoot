@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Capture the Android runtime environment into $ROOTFS/etc/android.env and
 # (re)generate wrappers in $ROOTFS/usr/local/bin that run Android binaries
 # (am, pm, cmd, settings, dumpsys, getprop, android <any>) with that env.

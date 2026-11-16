@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 // AGP 9 compiles Kotlin itself ("built-in Kotlin"): do not apply
 // org.jetbrains.kotlin.android. The Compose compiler plugin is still needed.
 plugins {

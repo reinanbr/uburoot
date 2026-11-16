@@ -1,4 +1,5 @@
 #!/sbin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Recovery entry point (TWRP etc.). Only Magisk supports installing modules
 # from recovery; KernelSU and APatch modules are not recovery-compatible.
 # Hands over to Magisk's own module installer (install_module in

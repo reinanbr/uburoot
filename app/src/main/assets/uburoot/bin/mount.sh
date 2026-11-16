@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Mount everything the chroot needs. Idempotent: every mount is skipped when
 # its target already appears in /proc/self/mounts.
 # Must run in the global mount namespace (su --mount-master) so that all

@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Enter the Ubuntu chroot with a clean environment.
 # Usage: enter.sh [user] [command...]
 #   user     Ubuntu user (default: DEFAULT_USER from config, else root)

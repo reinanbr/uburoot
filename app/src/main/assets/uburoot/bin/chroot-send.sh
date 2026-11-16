@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Installed by android-env into the rootfs as /usr/local/lib/uburoot/uburoot-send.
 # Runs INSIDE the chroot, as root: the uburoot-* commands call it through a
 # sudo rule that allows exactly this file. It sends one command to the UbuRoot

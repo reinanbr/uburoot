@@ -1,4 +1,5 @@
 #!/bin/sh
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Build one version the way F-Droid does and check it against the published
 # release APK (reproducible build). Uses fdroidserver from PyPI in a temporary
 # venv, the recipe tools/fdroid/com.reinanbr.uburoot.yml (the file submitted to

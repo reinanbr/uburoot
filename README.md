@@ -93,9 +93,22 @@ Available now:
 - **Open in UbuRoot**: share a file from any app to open a session in its folder. Files
   outside the phone's shared storage are copied to `~/Shared` first.
 
-Planned (see the roadmap in [CLAUDE.md](CLAUDE.md#phase-status)):
+- **Start at boot** (needs the module, see [Install](#install)): Settings → *Start Ubuntu
+  at boot* mounts Ubuntu when the phone starts and runs, as root, every executable script
+  in `/etc/uburoot-boot.d/` in name order. Names may only use letters, digits, `_` and
+  `-`, like `run-parts`. For example, `/etc/uburoot-boot.d/10-sshd`:
 
-- start at boot through the module (e.g. run `sshd` at boot).
+  ```sh
+  #!/bin/sh
+  mkdir -p /run/sshd
+  exec /usr/sbin/sshd -p 8022   # sshd forks into the background by itself
+  ```
+
+  Each script gets 60 seconds (`BOOT_SCRIPT_TIMEOUT` in `uburoot.conf`). One still
+  running after that is left running and the next one starts. When `/sdcard` is mounted,
+  the start waits for the first unlock, because shared storage stays encrypted until
+  then. The log goes to `/data/local/uburoot/boot.log`. *Run boot scripts now* in
+  Settings does the same without a reboot, e.g. after *Stop all*, which also stops them.
 
 ## Requirements
 
@@ -131,8 +144,9 @@ Use one of these:
 | Root manager → Modules → *Install from storage* (`-module.zip`) | Magisk, KernelSU, APatch | installs the module and the app right away |
 | Flash the `-module.zip` in a custom recovery (TWRP) | **Magisk only** | installs the module; the app is installed on the next boot |
 
-The module does nothing at boot yet: it only installs the app. Recovery flashing is
-implemented but not tested yet. KernelSU and APatch modules can't be flashed from
+The module installs the app and, if *Start Ubuntu at boot* is on, starts Ubuntu at boot.
+Removing the module never deletes Ubuntu. Recovery flashing is implemented but not
+tested yet. KernelSU and APatch modules can't be flashed from
 recovery (their docs say so), and the installer stops with a message.
 
 Optional: verify the release signature.
@@ -301,7 +315,8 @@ raw sockets, at the cost of needing root.
 
 **Does it survive a reboot?**
 Ubuntu itself, yes: it lives in `/data/local/uburoot`. The mounts don't, and they are
-re-created the next time you open the terminal. Starting services at boot is planned.
+re-created the next time you open the terminal, or at boot with *Start Ubuntu at boot*
+and the module, which can also start services (see [Features](#features)).
 
 **Can I run Docker or systemd services?**
 Not currently. There is no systemd, and container runtimes are untested.

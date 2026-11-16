@@ -9,6 +9,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Start at boot: with the root module installed and *Start Ubuntu at boot* on, the module
+  mounts Ubuntu at boot and runs `/etc/uburoot-boot.d/*` inside it as root (`boot.sh`, log
+  in `/data/local/uburoot/boot.log`). Settings shows the module's state and can run the
+  boot scripts on demand.
 - Android bridge: `uburoot-notify`, `uburoot-toast`, `uburoot-vibrate`, `uburoot-clip` and
   `uburoot-open` (also installed as `xdg-open`) inside Ubuntu. They reach the app through a
   receiver guarded by a signature permission.

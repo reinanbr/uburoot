@@ -16,7 +16,7 @@ Play Core, or any proprietary Google dependency.
 | 2 | App MVP: root check, installer, one terminal session | done (unit 17/17; on device: clean install discover→download→SHA256→extract→setup→terminal, resume after a kill, apt as the user; device suite 59/59 incl. real reset; in-app session suite 35/35, host root identical to baseline after umount; dev/network suite 54/54; R8 release build verified on device) |
 | 3 | Multiple sessions, foreground service, extra keys, settings | done (unit 22/22, Docker 90/90, device 53/53; on device: tabs, extra keys incl. sticky CTRL, links, themes, notification actions, wake lock, settings save/DNS/repair, Stop all in ~5 s, preflight waits for Stop all) |
 | 4 | Android integration (receiver, `uburoot-*` commands, share target) | done (unit 26/26, Docker 116/116; on device: every command as a sudoer and as a non-sudoer, in the background and with the app force-stopped, file/URL open, errors back in the terminal, share of a document/text) |
-| 5 | Boot module (Magisk/KSU/APatch zip) | todo |
+| 5 | Boot module (Magisk/KSU/APatch zip) | in progress (unit 26/26, Docker 138/138; device test pending) |
 
 ## Core principle: system logic lives in shell scripts
 
@@ -57,6 +57,7 @@ no bashisms; `shellcheck -s sh` must pass.
 | `setup.sh [--user N] ...` | post-install: DNS, hosts, hostname, AID groups, apt sources, locale, sudo, user. `--dns-only` rewrites just `resolv.conf` (Settings → DNS) |
 | `hangup.sh PID` | SIGHUP+SIGCONT to the chroot processes whose controlling tty is PID's stdin (the app passes a session's `su` client when its tab closes) |
 | `reset.sh --yes` | the only deletion path: `umount.sh --kill`, then `ubu_safe_rm` |
+| `boot.sh [--now\|--status]` | run by the module's `service.sh`. Without `BOOT_START=1` it does nothing. Waits for shared storage to decrypt (if `MOUNT_SDCARD`, up to 6 h), runs `mount.sh`, then each executable `/etc/uburoot-boot.d/NAME` (`[A-Za-z0-9_-]+`, no symlinks) through `enter.sh root`. A script still running after `BOOT_SCRIPT_TIMEOUT` (60 s) is left running. `--now` skips the wait and `BOOT_START`; `--status` prints `module=enabled\|disabled\|removing\|pending\|missing` (`/data/adb/modules{,_update}/uburoot`, the same for all three managers) and `boot_start=` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=` (used by the app) |
 | `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
 | `chroot-cmd.sh` | installed as `uburoot-cmd`; dispatches on `$0` (`uburoot-notify`... / `xdg-open`) to `uburoot-send`, through `sudo -n` unless root |
@@ -65,9 +66,10 @@ no bashisms; `shellcheck -s sh` must pass.
 Config keys (`uburoot.conf`): `MOUNT_SDCARD`, `ANDROID_INTEGRATION`, `DNS_SERVERS`,
 `DEFAULT_USER`, `INIT_COMMAND`, `UBU_HOSTNAME`, `SDCARD_SOURCE` (optional override),
 `INOTIFY_MAX_WATCHES` (default 524288; `mount.sh` raises
-`fs.inotify.max_user_watches` to it, never lowers it; 0 = leave alone).
+`fs.inotify.max_user_watches` to it, never lowers it; 0 = leave alone), `BOOT_START`
+(0/1, Settings → Start at boot), `BOOT_SCRIPT_TIMEOUT` (default 60 s, hand edit only).
 
-Test-only env overrides (never set by the app): `UBU_BASE`, `ROOTFS`, `UBU_MOUNTS_FILE`,
+Test-only env overrides (never set by the app): `UBU_MODULES` (default `/data/adb`), `UBU_BASE`, `ROOTFS`, `UBU_MOUNTS_FILE`,
 `UBU_INOTIFY_FILE` (Docker: the container's `/proc/sys` is the host's),
 `UBU_BB` (`none` = plain commands), `UBU_ALLOW_NONROOT=1`, `UBU_ALLOW_ANY_ARCH=1`.
 
@@ -250,6 +252,9 @@ dev machine the default `java-25` is a JRE, so build with
 - Reading the clipboard with `service call clipboard` as root **clears it** ("Could
   not grant permission to primary clip. Clearing clipboard"). Check a clip by pasting
   into the terminal instead.
+- KDoc gotcha: Kotlin block comments nest, so a comment containing
+  `/etc/uburoot-boot.d/*` opens a nested comment that swallows the code after it
+  (the compiler only reports "unresolved reference"). Don't write `/*` inside comments.
 - Docker's fake `/system/bin/am` must only use mksh builtins (`print -r`): the Android
   `PATH` in the chroot has no `printf`.
 
@@ -276,8 +281,13 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
 - Managers' file pickers may not list `*.apk` (not confirmed in source). Publish the
   same bytes also as `.zip`, or tell users to rename. Magisk's own docs do this for
   its APK.
-- `service.sh` mounts nothing yet. Boot autostart (`mount.sh` + `/etc/uburoot-boot.d`)
-  is Phase 6 and must keep the critical rule (no `uninstall.sh` that deletes the rootfs).
+- `service.sh` (late_start, global mount namespace, non-blocking) installs the app copy
+  if there is one, then runs `bin/boot.sh` (log `boot.log`, the previous one
+  `boot.log.old`). It does so only if `/data/local/uburoot`, `bin` and `boot.sh` are
+  owned by root and not writable by group or others. Magisk, KernelSU and APatch run
+  module scripts with their busybox `sh`, so `stat -c` is available. There is
+  deliberately **no `uninstall.sh`**: removing the module never touches the rootfs
+  (critical rule).
 - Magisk guide: "DO NOT add custom logic in update-binary" (the Magisk app replaces it).
   Ours only hands over to `install_module`, the same thing Magisk's
   `module_installer.sh` does.
@@ -382,8 +392,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 27 files, guard 13/13, Docker
-  116/116 (Phase 1 result: 17 files, 13/13, 70/70).
+- `tests/run-all.sh`: everything below. Now: shellcheck 28 files, guard 13/13, Docker
+  138/138 (Phase 1 result: 17 files, 13/13, 70/70).
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`
   image. `.shellcheckrc` disables SC2016 (awk programs are single-quoted).
 - `tests/test_reset_guard.sh`: critical rule with dummy dirs, a fake mounts table and a

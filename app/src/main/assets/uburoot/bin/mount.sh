@@ -238,4 +238,32 @@ case "$INOTIFY_MAX_WATCHES" in
         ;;
 esac
 
+# 5) Time zone: Ubuntu follows Android's (persist.sys.timezone; Ubuntu Base starts with
+#    none, which is UTC). Needs tzdata, which setup.sh installs. Only a link we wrote
+#    (or none, or the default Etc/UTC) is replaced: a zone picked inside Ubuntu
+#    (dpkg-reconfigure tzdata) stays. etc/uburoot/timezone records our last choice.
+_tz=$(getprop persist.sys.timezone 2>/dev/null) || _tz=""
+case "$_tz" in '' | /* | *..* | *[!A-Za-z0-9_+/-]*) _tz="" ;; esac
+if [ -n "$_tz" ] && [ -f "$R/usr/share/zoneinfo/$_tz" ] && [ -d "$R/etc" ] && [ ! -L "$R/etc" ]; then
+    _ours=$(cat "$R/etc/uburoot/timezone" 2>/dev/null) || _ours=""
+    _cur=""
+    if [ -L "$R/etc/localtime" ]; then
+        _cur=$(readlink "$R/etc/localtime")
+    elif [ -e "$R/etc/localtime" ]; then
+        _cur=not-a-link
+    fi
+    case "$_cur" in
+        "/usr/share/zoneinfo/$_tz") ;;
+        '' | /usr/share/zoneinfo/Etc/UTC | "/usr/share/zoneinfo/$_ours")
+            # A recorded zone that the user then changed to UTC is theirs: skip.
+            if [ "$_cur" != /usr/share/zoneinfo/Etc/UTC ] || [ -z "$_ours" ] || [ "$_ours" = Etc/UTC ]; then
+                ln -sfn "/usr/share/zoneinfo/$_tz" "$R/etc/localtime" &&
+                    echo "$_tz" >"$R/etc/timezone" &&
+                    mkdir -p "$R/etc/uburoot" && echo "$_tz" >"$R/etc/uburoot/timezone" &&
+                    ubu_log "time zone: $_tz"
+            fi
+            ;;
+    esac
+fi
+
 exit 0

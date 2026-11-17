@@ -276,8 +276,10 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
 - Localhost only: the X server listens on a Unix socket inside the rootfs, never on the
   network. LAN access (VNC with a password, as the spec allows as an opt-in) is not
   done.
-- The panel clock shows UTC: Ubuntu's `/etc/localtime` is UTC and Android's time zone
-  (`persist.sys.timezone`) isn't carried over yet.
+- Time zone: Ubuntu Base has no time zones at all (UTC). `setup.sh` installs `tzdata`,
+  and every mount sets Ubuntu's zone to Android's (`persist.sys.timezone`), unless one
+  was picked inside Ubuntu (`sudo dpkg-reconfigure tzdata`). On an older install, run
+  `sudo apt install tzdata` once.
 
 ### Firefox from Mozilla's repository
 

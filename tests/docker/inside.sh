@@ -60,7 +60,9 @@ mkdir -p /apex/com.android.runtime && mount -t tmpfs tmpfs /apex/com.android.run
 echo linker >/apex/com.android.runtime/marker
 mkdir -p /storage/emulated/0/Download /storage/emulated/0/Android
 echo "PRECIOUS photo" >/storage/emulated/0/Download/photo.jpg
-printf '#!/bin/sh\necho test/fingerprint/1\n' >/usr/local/bin/getprop && chmod 755 /usr/local/bin/getprop
+# getprop: Android's time zone comes from /tmp/android-tz (absent = unset).
+printf '#!/bin/sh\nif [ "$1" = persist.sys.timezone ]; then cat /tmp/android-tz 2>/dev/null; else echo test/fingerprint/1; fi\n' \
+    >/usr/local/bin/getprop && chmod 755 /usr/local/bin/getprop
 export BOOTCLASSPATH=/apex/com.android.art/javalib/core-oj.jar:/system/framework/framework.jar
 ok "layout ready"
 
@@ -215,6 +217,39 @@ done
 check "/product mirrored as symlink" sh -c "[ \"\$(readlink $R/product)\" = /system/product ]"
 check "no shared mount under rootfs" sh -c "! awk -v p=$R '(\$5==p||index(\$5,p\"/\")==1){for(i=7;i<=NF&&\$i!=\"-\";i++)if(\$i~/^shared:/)f=1}END{exit !f}' /proc/self/mountinfo"
 check "rootfs/data is non-recursive (no mounts seen through it)" test ! -e $R/data/local/uburoot/rootfs/proc/self
+tzlink() { readlink $R/etc/localtime; }
+h_tz() {
+    echo America/Sao_Paulo >/tmp/android-tz
+    $B/mount.sh >/dev/null 2>&1
+    [ "$(tzlink)" = /usr/share/zoneinfo/America/Sao_Paulo ] && [ "$(cat $R/etc/timezone)" = America/Sao_Paulo ] &&
+        [ "$($B/enter.sh root 'date +%z' 2>/dev/null)" = -0300 ]
+}
+h_tzfollow() {
+    echo Europe/Lisbon >/tmp/android-tz
+    $B/mount.sh >/dev/null 2>&1
+    [ "$(tzlink)" = /usr/share/zoneinfo/Europe/Lisbon ]
+}
+h_tzbad() {
+    for _z in ../../etc/passwd /etc/passwd 'A;B' No/Such_Zone; do
+        echo "$_z" >/tmp/android-tz
+        $B/mount.sh >/dev/null 2>&1
+        [ "$(tzlink)" = /usr/share/zoneinfo/Europe/Lisbon ] || return 1
+    done
+}
+h_tzuser() {
+    ln -sfn /usr/share/zoneinfo/Asia/Tokyo $R/etc/localtime
+    echo America/Sao_Paulo >/tmp/android-tz
+    $B/mount.sh >/dev/null 2>&1
+    [ "$(tzlink)" = /usr/share/zoneinfo/Asia/Tokyo ] || return 1
+    ln -sfn /usr/share/zoneinfo/Etc/UTC $R/etc/localtime
+    $B/mount.sh >/dev/null 2>&1
+    [ "$(tzlink)" = /usr/share/zoneinfo/Etc/UTC ]
+}
+check "time zone: Ubuntu gets Android's (tzdata from setup)" h_tz
+check "time zone: follows a change on Android" h_tzfollow
+check "time zone: odd or unknown zone names ignored" h_tzbad
+check "time zone: a zone picked inside Ubuntu (even UTC) is kept" h_tzuser
+rm -f /tmp/android-tz $R/etc/uburoot/timezone
 
 section "doctor.sh (read-only report)"
 mkdir -p /vendor/lib/modules

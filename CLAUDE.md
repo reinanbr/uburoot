@@ -618,7 +618,13 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
     `gpgv`. SUMO's article is behind a JS challenge (not readable by tools).
     `Package: firefox*` with an origin pin is fine (the glob problem was only version
     pins). Ubuntu Base has no CA list: `ca-certificates` first.
-  - The XFCE clock shows UTC (no time zone from Android yet).
+  - Time zone: Ubuntu Base has no tzdata and no `/etc/localtime` (UTC). `setup.sh` now
+    installs `tzdata`; `mount.sh` section 5 links `/etc/localtime` to Android's
+    `persist.sys.timezone` (S9: `America/Sao_Paulo`) on every mount, and records it in
+    `/etc/uburoot/timezone`. Only a missing link, the default `Etc/UTC` or the zone it
+    wrote last is replaced, so a zone picked with `dpkg-reconfigure tzdata` stays.
+    Older rootfs without tzdata: `sudo apt install tzdata` (a migration may not install
+    packages). Docker's fake `getprop` reads the zone from `/tmp/android-tz`.
   - XFCE adds ~25 entries with `OnlyShowIn=XFCE;` (its settings dialogs, About, Run…):
     `x11.sh apps` leaves out any entry with `OnlyShowIn` (the list isn't a desktop).
   - CI release APK of `70c2d22` on the S9: *Linux apps* listed the 5 open windows with
@@ -741,7 +747,7 @@ directories as a fallback.
 ## Testing
 
 - `tests/run-all.sh`: everything below. Now: shellcheck 38 files, guard 17/17, Docker
-  299/299 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
+  303/303 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
   (0.9.0) must pass too: no `A && B || C`, `head -n 1 file` instead of `cat | head`,
   and `disable=SC2317,SC2329` together.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`

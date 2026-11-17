@@ -369,7 +369,8 @@ if [ "$DO_APT" = 1 ]; then
         in_chroot apt-get update || ubu_die "apt-get update failed (network/DNS?)"
     fi
     ubu_log "installing sudo"
-    in_chroot apt-get install -y --no-install-recommends sudo kmod || ubu_die "apt-get install sudo kmod failed"
+    # tzdata: mount.sh sets Ubuntu's time zone to Android's (Ubuntu Base has no zones).
+    in_chroot apt-get install -y --no-install-recommends sudo kmod tzdata || ubu_die "apt-get install sudo kmod tzdata failed"
 fi
 
 # --- User ------------------------------------------------------------------------

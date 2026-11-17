@@ -44,6 +44,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
   gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
   root and the users granted the class.
+- Ubuntu uses Android's time zone (it was UTC). Installs made before need
+  `sudo apt install tzdata` once. A zone you pick inside Ubuntu is kept.
 - Switch between open Linux apps: the *Linux apps* screen lists the open windows (tap
   to bring one back, ✕ to close it), and opening an app that is already open shows its
   window instead of starting it again, also from home screen shortcuts.

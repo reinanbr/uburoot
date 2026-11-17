@@ -133,3 +133,109 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   namespace): the app does not add it by itself.
 - The S9's Wi-Fi has no monitor mode (Phase 3): Wireshark sees this phone's own traffic,
   not other devices' Wi-Fi frames.
+
+## Part 2: GPU, sound, clipboard, packages (2026-11-16)
+
+### GPU: Turnip with the KGSL backend (`gpu.sh`, `tools/gpu/build-turnip.sh`)
+
+- Ubuntu 26.04's Mesa (26.0.8-1ubuntu0.3) has Turnip, but only with the upstream `msm`
+  kernel backend: `debian/rules` doesn't set `freedreno-kmds`, and Mesa's default is
+  `['msm']` (`meson.options:223`), so `tu_knl_kgsl.cc` isn't built
+  (`src/freedreno/vulkan/meson.build:116`). Android's Adreno driver is KGSL
+  (`/dev/kgsl-3d0`, `system:system 0666` on the S9). Result before: `vulkaninfo` and
+  `glxinfo` showed only llvmpipe, and Zink said "failed to choose pdev".
+- `tools/gpu/build-turnip.sh` cross-compiles only Turnip from Ubuntu's own source
+  package (`apt-get source mesa`, same version and patches) with
+  `-Dfreedreno-kmds=kgsl`, in an amd64 `ubuntu:26.04` container (2.5 min locally). It
+  ships as a Vulkan ICD of its own: `/usr/local/lib/uburoot/gpu/libvulkan_freedreno_kgsl.so`
+  and `/usr/local/share/vulkan/icd.d/uburoot_freedreno_kgsl_icd.json`. No dpkg file is
+  touched. CI builds it for tags (and manual runs) and publishes
+  `turnip-kgsl-arm64.tar.gz` with the release, listed in `SHA256SUMS`.
+- **SONAME pitfall:** Ubuntu's `freedreno_icd.json` names its library by the bare
+  `libvulkan_freedreno.so`. With our copy loaded under that same SONAME, glibc handed
+  ours back for it, and every app saw the GPU twice. `patchelf --set-soname` fixes it.
+- `gpu.sh install FILE SHA256` checks the hash and that the archive holds only those
+  regular files, then writes each one itself (`tar -O`), root-owned. It turns Zink on
+  (`/etc/uburoot/gpu.env` = `MESA_LOADER_DRIVER_OVERRIDE=zink`, read by the login hook).
+  The *Linux apps* screen downloads the release's file after a tap and checks it
+  against `SHA256SUMS`. It can also turn Zink off, show the renderer and remove the driver.
+- S9 (Adreno 630, kernel 4.9): `vulkaninfo` → "Turnip Adreno (TM) 630", Vulkan 1.3.335,
+  conformance 1.2.7.1. `glxinfo -B` → "zink Vulkan 1.3(Turnip Adreno (TM) 630
+  (MESA_TURNIP))", OpenGL 4.6.
+- glmark2 2023.01 on the S9:
+
+  | Run | llvmpipe | Zink on Turnip |
+  |-|-|-|
+  | Off-screen 1280x720 (terrain/refract/shadow/jellyfish) | 24 | **223** (terrain 2 → 88 FPS) |
+  | Full screen 720x1420 (terrain/refract/jellyfish) | 9 | **36** (terrain 3 → 38 FPS) |
+  | Window 640x480 (simple scenes) | 51 | 43 |
+
+  On screen every frame is copied into the X server by the CPU (no DRI3 path to
+  Termux:X11; `MIT-SHM` is missing too: Android kernels have no SysV IPC, "shmget():
+  Function not implemented"), which caps it near 40–45 FPS. Heavy 3D still runs about
+  10× faster. Light 2D apps don't gain. vkcube: 300 frames in 6.4 s.
+- Other GPUs (Mali, PowerVR…): no KGSL, so `gpu=none` and llvmpipe. Panfrost needs the
+  upstream kernel driver, which Android kernels don't have. Not researched further
+  without such a device.
+
+### Sound
+
+- `x11.sh run` starts the user's PulseAudio (`pulseaudio --start`, no systemd needed)
+  with `uburoot-audio pulse` (Phase 3: a pipe sink "android" made the default) when
+  PulseAudio is installed and the app's audio bridge is on (Hardware > Bridges, with
+  the user granted `audio`). `x11.sh status` says `audio=missing|bridge-off|ready`.
+  Ubuntu 26.04 defaults to PipeWire, whose daemons expect a systemd user session.
+- S9: a 440 Hz tone from `pacat` as `ana` became an active AudioFlinger track of the
+  UbuRoot process (48 kHz stereo).
+
+### Clipboard and keyboard
+
+- Termux:X11 syncs the clipboard itself (`clipboardEnable=true`). Android → X:
+  `uburoot-clip` text came out of `xclip -o -selection clipboard`. X → Android: the
+  activity logged "Clipboard content (16 symbols) is x11-to-android-2".
+- `input text` (Android key events) typed into Mousepad.
+
+### Session bus and runtime dir
+
+- No systemd/logind means no `XDG_RUNTIME_DIR` and no session bus. GNOME apps failed
+  ("Failed to execute child process dbus-launch"). The login hook now sets
+  `XDG_RUNTIME_DIR=~/.cache/uburoot/run` (0700). `x11.sh run` starts one
+  `dbus-daemon --session` per user there (`bus`, `bus.pid`), and the hook exports
+  `DBUS_SESSION_BUS_ADDRESS` while it is alive.
+
+### Packages that can't work in a chroot
+
+- **Snaps.** Ubuntu's `firefox`, `chromium-browser` and `thunderbird` are `1:1snap1…`
+  debs. They Pre-Depend on snapd, and their preinst runs `snap install`. Without
+  systemd it retries the store every minute for 30 minutes, then exits 1. `setup.sh`
+  (and migration 3) writes `/etc/apt/preferences.d/80uburoot-no-snap`: version `/snap/`
+  of those three and every snapd at priority -1. So `apt install firefox` says "no
+  installation candidate" at once. Version pins need package names (`Package: *` takes
+  only release/origin pins), and a trailing `*` makes APT do a prefix match
+  (`*snap*` matched nothing), hence the `/snap/` regex.
+- **Browser sandboxes.** The kernel refuses new user namespaces to a chrooted process
+  (`create_user_ns` checks `current_chrooted()`): on the S9 `unshare -U true` fails
+  inside Ubuntu even as root and works outside. bubblewrap-based sandboxes therefore
+  can't start: Epiphany/WebKitGTK stops with "bwrap: No permissions to create a new
+  namespace". Running a browser without its sandbox is the user's decision
+  (`WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1` for WebKitGTK); UbuRoot doesn't set it.
+  Firefox from Mozilla's own APT repository (a source the user adds) is the usual
+  alternative: not tested here.
+
+### Acceptance apps (S9)
+
+| App | Result |
+|-|-|
+| Wireshark 4.6.4 | live capture on wlan0 as `ana` (group `wireshark`) |
+| GIMP 3.2.2 | full screen, tools/brushes/layers usable by touch |
+| Mousepad 0.7.0 | full screen, typing from Android works |
+| glmark2 / vkcube | GPU path, numbers above |
+| Epiphany 49.2 | blocked by its sandbox (above) |
+| Ghidra | not packaged by Ubuntu (upstream zip + JDK 21): not tested |
+| gqrx 2.17.7 | needs an RTL-SDR dongle: not tested |
+
+### Still open
+
+- Switching between several running apps: matchbox shows the newest window. Opening an
+  app that is already running starts it again unless it is single-instance over D-Bus.
+- Desktop mode (XFCE vs LXQt), DRI3/zero-copy presentation, embedding Termux:X11.

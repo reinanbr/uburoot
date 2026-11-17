@@ -196,6 +196,27 @@ write_service_files() {
 exit 101
 EOF
     chmod 755 "$R/usr/sbin/policy-rc.d"
+    # Ubuntu's firefox, chromium-browser and thunderbird debs only install a snap,
+    # and snapd needs systemd as PID 1 (Android's init is PID 1 here). Without it
+    # their preinst retries the store every minute for 30 minutes, then fails and
+    # leaves dpkg with an error. So APT never picks them (docs/GUI.md). Version pins
+    # need package names ("Package: *" takes only release/origin pins); snapd's own
+    # pin also stops any other snap-only package (they Pre-Depend on it).
+    mkdir -p "$R/etc/apt/preferences.d"
+    cat >"$R/etc/apt/preferences.d/80uburoot-no-snap" <<'EOF'
+# UbuRoot: snaps need systemd as PID 1, which a chroot on Android doesn't have.
+# The "snap" versions of firefox, chromium-browser and thunderbird only install
+# a snap: install those browsers from their own APT repositories (docs/GUI.md).
+Explanation: UbuRoot: snap transitional packages can't work here
+Package: firefox chromium-browser thunderbird
+Pin: version /snap/
+Pin-Priority: -1
+
+Explanation: UbuRoot: snapd needs systemd as PID 1
+Package: snapd
+Pin: version *
+Pin-Priority: -1
+EOF
     ubu_write_profile_hook "$R" || ubu_warn "could not write profile hook"
 }
 
@@ -310,6 +331,13 @@ migrate_1() {
 # shellcheck disable=SC2317,SC2329
 migrate_2() {
     ubu_write_profile_hook "$R"
+}
+# 2 -> 3: the profile hook reads /etc/uburoot/gpu.env (gpu.sh: Zink on the GPU) and
+# sets XDG_RUNTIME_DIR and the session bus; APT never picks snap transitional
+# packages or snapd.
+# shellcheck disable=SC2317,SC2329
+migrate_3() {
+    write_service_files
 }
 
 if [ "$MIGRATE" = 1 ]; then

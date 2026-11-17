@@ -8,6 +8,10 @@
 # Without them, only the debug build is published as an artifact (signed with
 # the runner's throwaway debug key, so it cannot update a previous install).
 # A tag "v*" with the secrets set creates a GitHub release.
+#
+# Tags and manual runs also build the GPU driver (Mesa's Turnip with the KGSL backend,
+# tools/gpu/build-turnip.sh, from Ubuntu's own mesa source package): the app's
+# *Install GPU driver* button downloads it from the latest release (docs/GUI.md).
 name: CI
 
 on:
@@ -87,10 +91,33 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/release.jks"
 
+  turnip:
+    name: GPU driver (Turnip KGSL, arm64)
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cross-build from Ubuntu's mesa source
+        run: |
+          set -eu
+          mkdir -p out
+          docker run --rm -v "$PWD/out:/out" -v "$PWD/tools/gpu:/gpu:ro" ubuntu:26.04 sh /gpu/build-turnip.sh
+          sudo chown -R "$(id -u):$(id -g)" out
+          set -- out/turnip-kgsl-*-arm64.tar.gz
+          [ -f "$1" ]
+          cp "$1" out/turnip-kgsl-arm64.tar.gz
+          ls -l out
+      - uses: actions/upload-artifact@v7
+        with:
+          name: turnip-${{ github.sha }}
+          path: out/*.tar.gz
+          if-no-files-found: error
+
   release:
     name: GitHub release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [scripts, build]
+    needs: [scripts, build, turnip]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -98,6 +125,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: uburoot-${{ github.sha }}
+          path: dist
+      - uses: actions/download-artifact@v8
+        with:
+          name: turnip-${{ github.sha }}
           path: dist
       - name: Publish
         env:
@@ -110,7 +141,7 @@ jobs:
           [ -f "$1" ] || { echo "no signed release APK (keystore secrets missing?)" >&2; exit 1; }
           # Only what is published (the artifact's SHA256SUMS also lists the debug build).
           (cd dist && sha256sum uburoot-*-release.apk uburoot-*-release-module.zip \
-            uburoot.apk uburoot-module.zip >SHA256SUMS)
+            uburoot.apk uburoot-module.zip turnip-kgsl-*.tar.gz >SHA256SUMS)
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "UbuRoot $TAG" --generate-notes \
             dist/uburoot-*-release.apk dist/uburoot-*-release-module.zip \
-            dist/uburoot.apk dist/uburoot-module.zip dist/SHA256SUMS
+            dist/uburoot.apk dist/uburoot-module.zip dist/turnip-kgsl-*.tar.gz dist/SHA256SUMS

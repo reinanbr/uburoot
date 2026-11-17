@@ -33,3 +33,26 @@ class LinuxAppsTest {
         assertEquals("ana", LinuxApps.userOf("ana"))
     }
 }
+
+class GpuTest {
+    @Test
+    fun parsesStatus() {
+        val g = GpuStatus.parse(
+            listOf("gpu=adreno", "model=Adreno630v2", "driver=installed", "mesa=26.0.8-1ubuntu0.3", "zink=on"),
+        )
+        assertTrue(g.adreno && g.installed && g.zink)
+        assertEquals("Adreno630v2", g.model)
+        val n = GpuStatus.parse(listOf("gpu=none", "driver=missing", "zink=off"))
+        assertFalse(n.adreno || n.installed || n.zink)
+    }
+
+    @Test
+    fun findsTheSum() {
+        val a = "a".repeat(64)
+        val b = "B".repeat(64)
+        val sums = "$a  uburoot.apk\n$b *turnip-kgsl-arm64.tar.gz\nxyz  other\n"
+        assertEquals("b".repeat(64), Gpu.sumFor(sums, Gpu.ASSET))
+        assertEquals(null, Gpu.sumFor(sums, "missing.tar.gz"))
+        assertEquals(null, Gpu.sumFor("short  ${Gpu.ASSET}", Gpu.ASSET))
+    }
+}

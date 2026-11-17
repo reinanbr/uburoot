@@ -8,7 +8,8 @@
 # shows the screen. This is the chroot recipe of its README ("Using with chroot
 # environment").
 #
-# Usage: x11.sh status                 x11=missing|stopped|running, wm=NAME|none|missing
+# Usage: x11.sh status                 x11=missing|stopped|running, wm=NAME|none|missing,
+#                                      audio=missing|bridge-off|ready
 #        x11.sh start                  mount, start the server (+ a window manager)
 #        x11.sh stop                   stop the server (umount.sh does it too)
 #        x11.sh apps [USER]            ID|NAME|ICON for each GUI .desktop entry
@@ -84,6 +85,16 @@ as_user_bg() { # USER CMD
         echo 'cd "$HOME" 2>/dev/null || cd /'
         echo 'export DISPLAY=:0'
         echo 'mkdir -p "$HOME/.cache" 2>/dev/null'
+        # A session bus per user (no systemd/logind here): GNOME/KDE apps need one,
+        # and single-instance apps use it to reopen their window.
+        echo 'if [ -n "${XDG_RUNTIME_DIR:-}" ] && command -v dbus-daemon >/dev/null; then'
+        echo '    _b="$XDG_RUNTIME_DIR/bus"'
+        echo '    if ! kill -0 "$(cat "$_b.pid" 2>/dev/null)" 2>/dev/null; then'
+        echo '        rm -f "$_b"'
+        echo '        dbus-daemon --session --address="unix:path=$_b" --fork --print-pid >"$_b.pid" 2>/dev/null'
+        echo '    fi'
+        echo '    export DBUS_SESSION_BUS_ADDRESS="unix:path=$_b"'
+        echo 'fi'
         printf '( setsid %s </dev/null >>"$HOME/.cache/uburoot-x11.log" 2>&1 & )\n' "$2"
     } >"$_f" || return 1
     chmod 644 "$_f"
@@ -148,6 +159,25 @@ start() { # [USER]
         [ -S "$SOCK" ] || ubu_die "the X server did not start (log: $UBU_STATE/x11.log)"
     fi
     start_wm "${1:-${DEFAULT_USER:-root}}"
+}
+
+# Sound: with PulseAudio installed in Ubuntu and the app's audio bridge on (Hardware >
+# Bridges, HARDWARE_ACCESS), the user's PulseAudio plays on the phone through
+# `uburoot-audio pulse` (a pipe sink). Best effort: nothing happens otherwise.
+audio_state() {
+    if [ ! -x "$R/usr/bin/pulseaudio" ] || [ ! -x "$R/usr/bin/pactl" ]; then
+        echo missing
+    elif [ ! -e "$R/run/uburoot-bridge/audio" ] || [ ! -x "$R/usr/local/bin/uburoot-audio" ]; then
+        echo bridge-off
+    else
+        echo ready
+    fi
+}
+
+start_audio() { # USER
+    [ "$(audio_state)" = ready ] || return 0
+    # shellcheck disable=SC2016 # expanded by the user's shell
+    as_user_bg "$1" 'sh -c "pulseaudio --check || pulseaudio --start --exit-idle-time=-1; sleep 1; pactl list short modules | grep -q module-pipe-sink || uburoot-audio pulse"'
 }
 
 stop() {
@@ -239,6 +269,7 @@ run() { # USER ID
     # Exec field codes (%f %U ...) are for files/URLs we don't pass; %% is a %.
     _x=$(printf '%s\n' "$_e" | bb awk -F'|' '{ print $4 }' | bb sed -e 's/%[fFuUdDnNickvm]//g' -e 's/%%/%/g')
     start "$1"
+    start_audio "$1"
     as_user_bg "$1" "$_x" || ubu_die "could not start $2"
     ubu_log "started $2 as $1"
 }
@@ -259,6 +290,7 @@ status() {
     else
         echo "wm=missing"
     fi
+    echo "audio=$(audio_state)"
 }
 
 setup() {

@@ -40,7 +40,7 @@ UBU_MODULE_SOURCES="/vendor_dlkm/lib/modules /vendor/lib/modules /system_dlkm/li
 # Version of the integration files setup.sh writes into the rootfs. Bump it
 # together with a new migrate_N in setup.sh; the app runs `setup.sh --migrate`
 # when /etc/uburoot-release has an older SCHEMA.
-UBU_SCHEMA=2
+UBU_SCHEMA=3
 UBU_PORTS_MIRROR_DEFAULT=http://ports.ubuntu.com/ubuntu-ports/
 
 if [ -x /system/bin/sh ]; then UBU_SH=/system/bin/sh; else UBU_SH="sh"; fi
@@ -484,6 +484,19 @@ unset UBU_CWD
 # Linux GUI apps (x11.sh): once the X server has been used, its display is :0.
 if [ -z "${DISPLAY:-}" ] && [ -f /etc/uburoot/x11 ]; then
     export DISPLAY=:0
+fi
+# No systemd/logind: a per-user runtime dir, and the session bus x11.sh starts in it.
+if [ -z "${XDG_RUNTIME_DIR:-}" ] && [ -n "${HOME:-}" ] && mkdir -p "$HOME/.cache/uburoot/run" 2>/dev/null; then
+    chmod 700 "$HOME/.cache/uburoot/run" 2>/dev/null
+    export XDG_RUNTIME_DIR="$HOME/.cache/uburoot/run"
+fi
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ -S "${XDG_RUNTIME_DIR:-/nonexistent}/bus" ] &&
+    kill -0 "$(cat "$XDG_RUNTIME_DIR/bus.pid" 2>/dev/null)" 2>/dev/null; then
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+fi
+# GPU (gpu.sh): Mesa settings for the installed driver, e.g. OpenGL through Zink.
+if [ -r /etc/uburoot/gpu.env ]; then
+    . /etc/uburoot/gpu.env
 fi
 if [ -n "${UBU_INIT:-}" ]; then
     _ubu_init=$UBU_INIT

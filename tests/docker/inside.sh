@@ -163,9 +163,9 @@ rm -f /data/local/uburoot/uburoot.conf
 
 section "rootfs schema and migrations"
 REL=$R/etc/uburoot-release
-check "uburoot-release: SCHEMA=2" grep -qx SCHEMA=2 $REL
+check "uburoot-release: SCHEMA=3" grep -qx SCHEMA=3 $REL
 check "uburoot-release: UBUNTU and INSTALLED" sh -c "grep -q '^UBUNTU=.' $REL && grep -q '^INSTALLED=[0-9]' $REL"
-check "rootinfo: schema=2" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=2"
+check "rootinfo: schema=3" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=3"
 check "--migrate on a current rootfs is a no-op" sh -c "$B/setup.sh --migrate 2>&1 | grep -q 'up to date'"
 # What a rootfs set up by 0.2.x looks like: no release file, older or missing
 # integration files.
@@ -176,14 +176,17 @@ echo '# old hook' >$R/etc/profile.d/uburoot.sh
 chroot $R gpasswd -d root aid_net_raw >/dev/null 2>&1
 check "rootinfo: schema=0 on an old rootfs" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=0"
 if $B/setup.sh --migrate >/tmp/migrate.log 2>&1; then ok "setup.sh --migrate"; else bad "setup.sh --migrate"; tail -20 /tmp/migrate.log; fi
-check "migrated: SCHEMA=2" grep -qx SCHEMA=2 $REL
-check "migrated: profile hook rewritten (with DISPLAY)" sh -c "grep -q UBU_CWD $R/etc/profile.d/uburoot.sh && grep -q DISPLAY=:0 $R/etc/profile.d/uburoot.sh"
+check "migrated: SCHEMA=3" grep -qx SCHEMA=3 $REL
+check "migrated: profile hook rewritten (DISPLAY, gpu.env)" sh -c "grep -q UBU_CWD $R/etc/profile.d/uburoot.sh && grep -q DISPLAY=:0 $R/etc/profile.d/uburoot.sh && grep -q gpu.env $R/etc/profile.d/uburoot.sh"
 check "migrated: iptables selector back" test -x $R/usr/local/sbin/uburoot-iptables-select
+check "migrated: APT never picks snap packages" test -f $R/etc/apt/preferences.d/80uburoot-no-snap
+check "APT: firefox (a snap transitional deb) has no candidate" sh -c "$B/enter.sh root 'apt-cache policy firefox' 2>/dev/null | grep -q 'Candidate: (none)'"
+check "APT: other packages still install candidates" sh -c "$B/enter.sh root 'apt-cache policy dillo' 2>/dev/null | grep -q 'Candidate: [0-9]'"
 check "migrated: root back in aid_net_raw" sh -c "chroot $R id -Gn root | grep -qw aid_net_raw"
 check "migrated: users and APT sources untouched" sh -c "cmp -s /tmp/passwd.before $R/etc/passwd && cmp -s /tmp/sources.before $R/etc/apt/sources.list.d/ubuntu.sources"
 sed -i 's/^SCHEMA=.*/SCHEMA=99/' $REL
 check "--migrate leaves a newer rootfs alone" sh -c "$B/setup.sh --migrate 2>&1 | grep -q newer && grep -qx SCHEMA=99 $REL"
-sed -i 's/^SCHEMA=.*/SCHEMA=2/' $REL
+sed -i 's/^SCHEMA=.*/SCHEMA=3/' $REL
 mv $R/etc/uburoot-setup.done /tmp/setup.done
 check "--migrate refuses before setup has run" sh -c "! $B/setup.sh --migrate"
 mv /tmp/setup.done $R/etc/uburoot-setup.done
@@ -224,7 +227,7 @@ check "doctor runs (rc=$rc)" test "$rc" = 0
 check "doctor: every section" sh -c "for s in Root Android Kernel Hardware Storage Mounts Network Config; do grep -qx \"== \$s ==\" /tmp/doctor.txt || exit 1; done"
 check "doctor: summary line" grep -q '^summary: [0-9]* failed' /tmp/doctor.txt
 check "doctor: full root ok" grep -q '^full root: *\[ok\]' /tmp/doctor.txt
-check "doctor: schema ok" grep -q '^integration schema: *\[ok\] 2' /tmp/doctor.txt
+check "doctor: schema ok" grep -q '^integration schema: *\[ok\] 3' /tmp/doctor.txt
 check "doctor: vendor module vermagic" grep -q '^vendor vermagic: *4.9.337 SMP preempt mod_unload aarch64 (fake.ko)' /tmp/doctor.txt
 check "doctor: changed no mounts" test "$(mounted_under $R)" = "$n1"
 check "doctor (plain) names the user" grep -qw tester /tmp/doctor.txt
@@ -852,6 +855,52 @@ check "login shells get DISPLAY=:0 once the display was used" h_xdisplay
 check "umount.sh stops the X server" h_xumount
 rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
     $R/usr/share/icons/hicolor/48x48/apps/fakegui.png /data/local/uburoot/state/x11.prefs
+
+section "gpu.sh (GPU driver, fake Adreno)"
+mkdir -p /tmp/kgsl-sys /tmp/gpu-ok/usr/local/lib/uburoot/gpu /tmp/gpu-ok/usr/local/share/vulkan/icd.d
+echo Adreno630v2 >/tmp/kgsl-sys/gpu_model
+: >/tmp/kgsl-dev
+go() { env UBU_KGSL_DEV=/tmp/kgsl-dev UBU_KGSL_SYS=/tmp/kgsl-sys /system/bin/sh $B/gpu.sh "$@"; }
+printf 'ELF-fake' >/tmp/gpu-ok/usr/local/lib/uburoot/gpu/libvulkan_freedreno_kgsl.so
+printf 'mesa=26.0.8-test\nkmds=kgsl\n' >/tmp/gpu-ok/usr/local/lib/uburoot/gpu/BUILDINFO
+echo '{"ICD":{}}' >/tmp/gpu-ok/usr/local/share/vulkan/icd.d/uburoot_freedreno_kgsl_icd.json
+tar -C /tmp/gpu-ok -czf /tmp/gpu-ok.tgz usr
+# Bad archives: an extra file, a symlink in place of the library, a path out of it.
+cp -a /tmp/gpu-ok /tmp/gpu-extra && echo x >/tmp/gpu-extra/usr/local/lib/uburoot/gpu/evil
+tar -C /tmp/gpu-extra -czf /tmp/gpu-extra.tgz usr
+cp -a /tmp/gpu-ok /tmp/gpu-link && ln -sf /etc/shadow /tmp/gpu-link/usr/local/lib/uburoot/gpu/libvulkan_freedreno_kgsl.so
+tar -C /tmp/gpu-link -czf /tmp/gpu-link.tgz usr
+tar -P -C /tmp/gpu-ok -czf /tmp/gpu-dots.tgz usr ../kgsl-sys/gpu_model
+sha() { sha256sum "$1" | cut -d' ' -f1; }
+h_gstat() { go status | grep -qx gpu=adreno && go status | grep -qx model=Adreno630v2 && go status | grep -qx driver=missing; }
+h_gnone() { env UBU_KGSL_DEV=/nonexistent /system/bin/sh $B/gpu.sh status | grep -qx gpu=none; }
+h_gbadsha() { ! go install /tmp/gpu-ok.tgz "$(printf '%064d' 0)" 2>/dev/null && ! go install /tmp/gpu-ok.tgz xyz 2>/dev/null && ! test -e $R/usr/local/lib/uburoot/gpu/BUILDINFO; }
+h_gbad() {
+    for _t in extra link dots; do
+        go install /tmp/gpu-$_t.tgz "$(sha /tmp/gpu-$_t.tgz)" >/dev/null 2>&1 && return 1
+    done
+    [ ! -e $R/usr/local/lib/uburoot/gpu/libvulkan_freedreno_kgsl.so ] && [ ! -e $R/usr/local/lib/uburoot/gpu/evil ]
+}
+h_ginst() {
+    go install /tmp/gpu-ok.tgz "$(sha /tmp/gpu-ok.tgz | tr a-f A-F)" >/dev/null 2>&1 &&
+        [ "$(stat -c '%u:%g %a' $R/usr/local/lib/uburoot/gpu/libvulkan_freedreno_kgsl.so)" = "0:0 755" ] &&
+        [ "$(stat -c '%u:%g %a' $R/usr/local/share/vulkan/icd.d/uburoot_freedreno_kgsl_icd.json)" = "0:0 644" ] &&
+        go status | grep -qx driver=installed && go status | grep -qx mesa=26.0.8-test && go status | grep -qx zink=on
+}
+h_genv() { [ "$($B/enter.sh tester 'echo $MESA_LOADER_DRIVER_OVERRIDE' 2>/dev/null)" = zink ]; }
+h_gzoff() { go zink off && go status | grep -qx zink=off && [ -z "$($B/enter.sh tester 'echo $MESA_LOADER_DRIVER_OVERRIDE' 2>/dev/null)" ] && go zink on; }
+h_grend() { go renderer tester | grep -qx 'vulkan=?' && ! go renderer 'a;b' 2>/dev/null; }
+h_grm() { go remove && go status | grep -qx driver=missing && go status | grep -qx zink=off && [ ! -e $R/usr/local/lib/uburoot/gpu ] && ! go zink on 2>/dev/null; }
+check "gpu.sh status: Adreno model, no driver" h_gstat
+check "gpu.sh status: gpu=none without KGSL" h_gnone
+check "gpu.sh install refuses a wrong or malformed SHA256" h_gbadsha
+check "gpu.sh install refuses extra files, symlinks, paths out of it" h_gbad
+check "gpu.sh install: root-owned files, zink on (SHA256 any case)" h_ginst
+check "login shells get MESA_LOADER_DRIVER_OVERRIDE=zink" h_genv
+check "gpu.sh zink off/on" h_gzoff
+check "gpu.sh renderer runs as the user (no tools: ?), bad user refused" h_grend
+check "gpu.sh remove" h_grm
+rm -rf /tmp/gpu-ok /tmp/gpu-extra /tmp/gpu-link /tmp/kgsl-sys /tmp/kgsl-dev /tmp/gpu-*.tgz
 
 section "uburoot-kbuild (fake kernel tree)"
 mkdir -p /tmp/ksrc

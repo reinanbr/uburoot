@@ -30,7 +30,7 @@ front-ends, chroot manager, kernel manager). The gap analysis and the phase list
 | 0b | Relicense to GPL-3.0-or-later, SPDX headers, About screen | done (released in 0.3.0) |
 | 1 | Doctor (kernel report + hardware inventory), full-root gate, rootfs schema + migrations, wake lock / mirror / offline install, `docs/COMPATIBILITY.md` | done (unit 29/29, Docker 182/182, device 60/60; CI release build of `c57688b` on the S9: the preflight passed the full-root gate and migrated a 0.2.x rootfs to SCHEMA 1 (INSTALLED kept), the terminal opened, host mounts identical to the baseline after `umount.sh --kill`. **Not tested in the UI:** the Diagnostics screen (Share/Copy), the install form's mirror/offline fields and an actual offline install. The phone now has a PIN lock, so UI tests need the owner to unlock it) |
 | 2 | Full kernel access (`KERNEL_ACCESS`) | scripts + app done (unit 33/33, guard 17/17, Docker 223/223; S9 over adb: binds, `uburoot-kernel` devmode/selinux/revert, signed-module refusal, trace-cmd, simpleperf, host mounts identical after Stop all). CI release APK of `a7e5b2d` on the S9: preflight → terminal; Settings → Kernel access: the warning appears only when turning it on, Cancel keeps 0, Save writes `KERNEL_ACCESS='0'` with the "applies after Repair mounts" notice. on again through the warning + Save + *Repair mounts* (8 kernel binds); Kernel screen: state, developer mode (kptr 2→1, recorded), SELinux switch with its dialog (Permissive), *Revert changes* with its dialog (Enforcing, kptr 2, 0 changes), `dmesg -w` root tab (closing it left no process) |
-| 4 | Linux GUI apps | gate done (`docs/GUI.md`); owner chose Termux:X11 companion now, embedded later. Unit 38/38, Docker 282/282. CI release APK of `4cd4713` on the S9: menu → *Linux apps* lists Wireshark with its icon; *Stop the display*; tap → fresh server + Wireshark full screen in 10 s (no frozen frame); hold → launcher pin dialog → shortcut with the app icon; with the display stopped, the shortcut opened Wireshark in 9 s (SELinux enforcing). `x11.sh`, *Linux apps* screen, launcher shortcuts, DISPLAY in login shells (schema 2). Wireshark opened and captured on the S9 (SELinux enforcing). Not yet: GPU, audio in sessions, desktop mode, clipboard, embedding |
+| 4 | Linux GUI apps | gate done (`docs/GUI.md`); owner chose Termux:X11 companion now, embedded later. Part 2 (GPU Turnip KGSL + Zink, sound, session bus, no-snap pins): unit 40/40, Docker 294/294. Part 1: unit 38/38, Docker 282/282. CI release APK of `4cd4713` on the S9: menu → *Linux apps* lists Wireshark with its icon; *Stop the display*; tap → fresh server + Wireshark full screen in 10 s (no frozen frame); hold → launcher pin dialog → shortcut with the app icon; with the display stopped, the shortcut opened Wireshark in 9 s (SELinux enforcing). `x11.sh`, *Linux apps* screen, launcher shortcuts, DISPLAY in login shells (schema 2). Wireshark opened and captured on the S9 (SELinux enforcing). Not yet: GPU, audio in sessions, desktop mode, clipboard, embedding |
 | 3 | Full hardware access (`HARDWARE_ACCESS`) | 3a (unit 35/35, guard 17/17, Docker 259/259) scripts + app: classes, grants, permission rules + watcher, Wi-Fi takeover, CPU/LED/wake lock/bus nodes, Hardware screen (`docs/HARDWARE.md`). CI release APK of `ed25f12` on the S9: Settings warning + Save + *Repair mounts*; `uburoot-hw` list/info/cpu/grant; Wi-Fi takeover with Ubuntu's real `wpa_supplicant` and *Give back* from the screen; revert from the screen (CPU, governors, wake lock); terminal menu stable; S9 restored (host mounts identical, 0 changes, Hardware access off). 3b (unit 35/35, guard 17/17, Docker 274/274): USB gadget (NCM/ACM/HID/storage) tested on the S9 over adb after a kernel panic redesign (below); bridges (audio, camera, sensors, location) scripts + app, Docker (fake app over perl); CI release APKs of `4088af0` and `5e133b6` on the S9: every bridge from the screen, in front and in the background, gadget NCM from the screen, *Stop all* reverted all; S9 restored (Hardware access off, 0 changes, 1068 host mounts, the test's permissions revoked) |
 
 ## Core principle: system logic lives in shell scripts
@@ -79,6 +79,7 @@ no bashisms; `shellcheck -s sh` must pass.
 | `hardware.sh` | `uburoot-hw` (Ubuntu side, installed by mount.sh with `HARDWARE_ACCESS=1`) and the app's backend: `list`, `info CLASS`, `status` (`access=`, `class=NAME\|ROUTE\|STATE\|NODES\|GROUP\|USERS`, `cpu=`, `battery=`, `wakelock=`, `rules=`, `changes=`), `grant\|revoke CLASS USER`, `takeover\|release wifi`, `cpu governor\|min\|max\|online`, `wakelock on\|off`, `set` (LEDs only), `allow NODE` (bus nodes, PMIC/charger names refused), `apply`/`watch` (permission rules in `$ROOTFS/etc/uburoot/hw-rules`, watcher pid in `run/uburoot/hw-watch.pid`, stopped by `umount.sh`), `gadget on ncm\|acm\|hid\|storage IMAGE [rw]\|off\|status` (links `uburoot.*` into the bound gadget's config; record `takeover gadget GADGET:UDC`), `bridge publish NAME SOCKET` (token on stdin → `$ROOTFS/run/uburoot-bridge/NAME`, `root:GROUP 0640`) / `unpublish NAME\|all`; status adds `bridge=NAME\|on\|off` and `gadget=FUNCS\|UDC` |
 | `hwbridge.sh` + `bridge-client` | installed by mount.sh (`HARDWARE_ACCESS=1`) as `/usr/local/lib/uburoot/{hwbridge,bridge-client}`, with the links `uburoot-audio|camera|sensors|gps` → `hwbridge` (dispatch on `$0`). `bridge-client NAME CMD ARGS` (perl-base: Ubuntu Base has no python/socat) reads `/run/uburoot-bridge/NAME` (`socket=`, `token=`), connects to the app's abstract socket, sends `TOKEN CMD ARGS\n`, expects `OK [info]`/`ERR msg`, then streams (`play`: stdin → app, half-close, wait for the app to close) |
 | `x11.sh` | Linux GUI apps through Termux:X11 (docs/GUI.md): `status` (`x11=missing\|stopped\|running`, `wm=NAME\|none\|missing`), `start` (closes Termux:X11's activity, runs its `CmdEntryPoint` as root via `app_process` with `TMPDIR=$ROOTFS/tmp`, first-start preferences, matchbox WM as the user), `stop`, `apps [USER]`/`icons [USER]` (`.desktop` entries, PNG base64; files must resolve inside the rootfs), `run USER ID` (detached as the user, `DISPLAY=:0`, launcher in root-owned `/run/uburoot-x11`), `setup` (apt: matchbox-window-manager, xkb-data). `umount.sh` stops the server |
+| `gpu.sh` | GPU for Linux apps (docs/GUI.md): `status` (`gpu=adreno\|none`, `model=`, `driver=installed\|missing`, `mesa=`, `zink=on\|off`), `install FILE SHA256` (Turnip KGSL tarball from `tools/gpu/build-turnip.sh`: only 3 regular files allowed, each written by us via `tar -O`, root-owned; turns Zink on), `remove`, `zink on\|off` (`/etc/uburoot/gpu.env`, read by the login hook), `renderer USER` (`vulkan=`/`opengl=` as the user) |
 | `kbuild.sh` | `uburoot-kbuild check\|prepare SRC\|build DIR`: GKI/vendor, expected vermagic from `/proc/config.gz`, signing/modversions verdict; `prepare` sets `LOCALVERSION` so `make kernelrelease` = `uname -r` |
 | `rootinfo.sh` | prints `impl=`, `version=`, `mount_master_flag=`, `busybox=`, `schema=`/`schema_current=`, and the root report: `cap_last_cap=`, `cap_eff=`, `cap_bnd=`, `no_new_privs=`, `seccomp=`, `full_root=yes\|no`, `selinux=` (used by the app) |
 | `chroot-send.sh` | runs **inside** the chroot as root (installed as `uburoot-send`): `notify TITLE [TEXT]`, `toast TEXT`, `vibrate [MS]`, `clip [TEXT]` (stdin), `open FILE\|URL` → `am broadcast` to the app, prints the app's error |
@@ -104,7 +105,7 @@ Test-only env overrides (never set by the app): `UBU_MODULES` (default `/data/ad
 `UBU_BOOT_ID_FILE`, `UBU_INSMOD`, `UBU_RMMOD`, `UBU_MODPROBE`, `UBU_ACCESS_FILE`;
 hardware.sh/changes.sh: `UBU_HW_ROOT` (fake `/dev` + `/sys` prefix), `UBU_POWER_DIR`,
 `UBU_ACMD` (fake `cmd`/`settings`), `UBU_ALLOW_NONROOT`, `UBU_GADGET_DIR` (fake `usb_gadget` dir); kbuild.sh: `UBU_KCONFIG`,
-`UBU_KBUILD_STATE`, `UBU_KBUILD_MAKEFLAGS`; x11.sh: `UBU_X11_APK` (skips `pm`, `am`), `UBU_APP_PROCESS` (fake X server).
+`UBU_KBUILD_STATE`, `UBU_KBUILD_MAKEFLAGS`; x11.sh: `UBU_X11_APK` (skips `pm`, `am`), `UBU_APP_PROCESS` (fake X server); gpu.sh: `UBU_KGSL_DEV`, `UBU_KGSL_SYS`.
 
 ## CRITICAL SAFETY RULE: never `rm -rf` the rootfs while anything is mounted under it
 
@@ -372,7 +373,7 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
   `CapEff=CapBnd=0x3fffffffff` (`cap_last_cap` 37), Seccomp 0, `u:r:magisk:s0`,
   enforcing. Docker: `setpriv --bounding-set -sys_module` and `--no-new-privs` both give
   `full_root=no`.
-- **Rootfs schema.** `UBU_SCHEMA` in common.sh (now 2: the profile hook sets `DISPLAY=:0` once `/etc/uburoot/x11` exists). `/etc/uburoot-release` holds
+- **Rootfs schema.** `UBU_SCHEMA` in common.sh (now 3: 2 = the profile hook sets `DISPLAY=:0` once `/etc/uburoot/x11` exists; 3 = the hook sets `XDG_RUNTIME_DIR=~/.cache/uburoot/run`, the session bus and `/etc/uburoot/gpu.env`, and `/etc/apt/preferences.d/80uburoot-no-snap`). `/etc/uburoot-release` holds
   `SCHEMA`, `INSTALLED` (mtime of `uburoot-setup.done`) and `UBUNTU`. A migration may
   only rewrite UbuRoot's own files (profile hook, policy-rc.d, AID groups, the iptables
   selector), never APT sources, users or packages (Docker compares `passwd` and the
@@ -573,6 +574,36 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
     wireshark ana` (done on the S9 at the owner's request) ana captured on wlan0. Not
     granted by setup.sh: it exposes the whole phone's traffic, the same reason
     `aid_net_raw` isn't granted.
+- **Phase 4 part 2 (S9, 2026-11-16).** Details and numbers in `docs/GUI.md`.
+  - **GPU.** Ubuntu's Turnip is built with Mesa's default `freedreno-kmds=['msm']`
+    (`meson.options:223`; `debian/rules` doesn't change it), so on Android only
+    llvmpipe appears. `tools/gpu/build-turnip.sh` builds Turnip with `kgsl` from Ubuntu's
+    source package as a separate ICD. On the S9: "Turnip Adreno (TM) 630" Vulkan 1.3;
+    Zink OpenGL 4.6. glmark2 full screen: 36 vs llvmpipe 9; off-screen 223 vs 24.
+  - **SONAME pitfall.** Ubuntu's ICD json has the bare `libvulkan_freedreno.so`. Our
+    copy under that SONAME was returned for it by glibc, so the GPU was listed twice.
+    Now `patchelf --set-soname libvulkan_freedreno_kgsl.so`.
+  - On-screen presentation is a CPU copy (no DRI3 to Termux:X11; no SysV shm on Android
+    kernels: `shmget()` ENOSYS, so no MIT-SHM). This caps it near 40–45 FPS.
+  - **Sound.** `x11.sh run` starts PulseAudio + `uburoot-audio pulse` when PulseAudio is
+    installed and the audio bridge is on. A `pacat` tone became an active
+    AudioFlinger track of the app.
+  - **Clipboard.** Termux:X11's own sync works both ways (`clipboardEnable=true`).
+  - **Session bus.** GNOME apps needed one ("dbus-launch" missing).
+    `XDG_RUNTIME_DIR=~/.cache/uburoot/run` comes from the hook; `x11.sh` starts
+    `dbus-daemon --session` there.
+  - **Snaps.** `firefox`/`chromium-browser`/`thunderbird` are snap transitional debs
+    (Pre-Depends snapd; their preinst retries the store for 30 min, then fails).
+    APT pins: `Pin: version /snap/` for those names and `snapd` at -1. Pitfalls: version
+    pins don't work with `Package: *`, and a trailing `*` is a prefix match in apt's
+    `versionmatch.cc`, so `*snap*` matched nothing.
+  - **User namespaces.** The kernel refuses `CLONE_NEWUSER` to chrooted processes
+    (`current_chrooted()` in `create_user_ns`). `unshare -U` fails inside even as root
+    and works outside. So bwrap sandboxes can't run (Epiphany). Disabling a browser
+    sandbox is the user's call; the app doesn't do it.
+  - Acceptance on the S9: Wireshark (capture), GIMP 3.2.2, Mousepad (typing from
+    Android). Not tested: Ghidra (not in Ubuntu), gqrx (no RTL-SDR dongle), a working
+    browser.
 - **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
   S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
   the archive signatures anyway). The app copies a SAF file into its cache, then
@@ -687,8 +718,8 @@ directories as a fallback.
 
 ## Testing
 
-- `tests/run-all.sh`: everything below. Now: shellcheck 36 files, guard 17/17, Docker
-  282/282 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
+- `tests/run-all.sh`: everything below. Now: shellcheck 38 files, guard 17/17, Docker
+  294/294 (Phase 1 result: 17 files, 13/13, 70/70). The CI runner's older shellcheck
   (0.9.0) must pass too: no `A && B || C`, `head -n 1 file` instead of `cat | head`,
   and `disable=SC2317,SC2329` together.
 - `tests/shellcheck.sh`: `shellcheck -s sh` from PATH, else the `koalaman/shellcheck:v0.11.0`

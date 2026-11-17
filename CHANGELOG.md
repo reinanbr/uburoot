@@ -44,6 +44,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
   gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
   root and the users granted the class.
+- **GPU for Linux apps** on Adreno: *Linux apps* → *Install the GPU driver* downloads
+  Mesa's Turnip built for Android's GPU driver (KGSL), published with each release and
+  checked against `SHA256SUMS`. OpenGL then runs on the GPU through Zink; the screen
+  shows the renderer. About 10× faster 3D than software rendering on the test phone.
+- Linux apps get sound when the audio bridge is on (PulseAudio to the phone's
+  speaker), a session D-Bus and `XDG_RUNTIME_DIR`. Copy and paste works both ways
+  through Termux:X11.
+- APT no longer offers Ubuntu's snap-only `firefox`/`chromium-browser`/`thunderbird`
+  packages, which can't work without systemd and used to hang for 30 minutes.
 - **Linux apps** (menu → *Linux apps*): GUI programs installed in Ubuntu (Wireshark,
   GIMP…) open full screen on the screen of Termux:X11, a GPL-3.0 companion app, with
   touch as clicks and a size that fits the phone; hold one to add it to the home

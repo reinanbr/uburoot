@@ -9,7 +9,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 SC_IMAGE=${SC_IMAGE:-koalaman/shellcheck:v0.11.0}
 cd "$ROOT"
 set -- app/src/main/assets/uburoot/bin/*.sh app/src/main/assets/uburoot/bin/android-env \
-    tests/*.sh tests/docker/*.sh tests/device/*.sh tools/*.sh \
+    tests/*.sh tests/docker/*.sh tests/device/*.sh tools/*.sh tools/gpu/*.sh \
     app/src/module/customize.sh app/src/module/service.sh app/src/module/META-INF/com/google/android/update-binary
 if command -v shellcheck >/dev/null 2>&1; then
     shellcheck --version | sed -n 2p

@@ -8,8 +8,11 @@ import android.util.Base64
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.reinanbr.uburoot.install.ConfigStore
+import com.reinanbr.uburoot.install.Downloader
+import com.reinanbr.uburoot.install.Http
 import com.reinanbr.uburoot.root.RootShell
 import com.reinanbr.uburoot.root.UbuPaths
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,6 +32,11 @@ data class LinuxAppsState(
     val busy: Boolean = false,
     /** Output of the last action (installing the window manager, an error). */
     val output: String = "",
+    val gpu: GpuStatus? = null,
+    /** `vulkan=…`/`opengl=…` from the last renderer check. */
+    val renderer: List<String> = emptyList(),
+    /** Download progress of the GPU driver, 0..1, or null. */
+    val gpuProgress: Float? = null,
 )
 
 class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
@@ -44,7 +52,8 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
         val user = LinuxApps.userOf(runCatching { ConfigStore.read().defaultUser }.getOrDefault(""))
         val status = LinuxApps.status()
         val apps = LinuxApps.apps(user)
-        _state.update { it.copy(loading = false, status = status, user = user, apps = apps) }
+        val gpu = Gpu.status()
+        _state.update { it.copy(loading = false, status = status, user = user, apps = apps, gpu = gpu) }
         val icons = withContext(Dispatchers.Default) {
             LinuxApps.icons(user).mapNotNull { (id, b64) ->
                 runCatching {
@@ -64,6 +73,43 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
             _state.update { it.copy(busy = false, output = if (r.ok) "" else r.text.trim()) }
             if (r.ok) _opened.tryEmit(app.name)
             _state.update { it.copy(status = LinuxApps.status()) }
+        }
+    }
+
+    /**
+     * Downloads the GPU driver from the latest release (the user tapped the button),
+     * checks it against the release's SHA256SUMS, then gpu.sh installs it.
+     */
+    fun installGpu() = work {
+        val dir = File(getApplication<Application>().cacheDir, "gpu")
+        val result = runCatching {
+            val sums = withContext(Dispatchers.IO) { Http.getText(Gpu.RELEASE + "SHA256SUMS") }
+            val sha = Gpu.sumFor(sums, Gpu.ASSET) ?: error("${Gpu.ASSET} is not in the latest release yet")
+            val file = Downloader().download(Gpu.RELEASE + Gpu.ASSET, File(dir, Gpu.ASSET), sha) { done, total ->
+                if (total > 0) _state.update { it.copy(gpuProgress = done.toFloat() / total) }
+            }
+            val r = Gpu.install(file.path, sha)
+            if (!r.ok) error(r.text.trim())
+        }
+        dir.deleteRecursively()
+        _state.update { it.copy(gpuProgress = null, output = result.exceptionOrNull()?.message.orEmpty()) }
+    }
+
+    fun removeGpu() = work {
+        Gpu.remove()
+        _state.update { it.copy(renderer = emptyList()) }
+    }
+
+    fun setZink(on: Boolean) = work { Gpu.zink(on) }
+
+    fun checkRenderer() = work { _state.update { it.copy(renderer = Gpu.renderer(it.user)) } }
+
+    private fun work(block: suspend () -> Unit) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, output = "") }
+        viewModelScope.launch {
+            block()
+            _state.update { it.copy(busy = false, gpu = Gpu.status()) }
         }
     }
 

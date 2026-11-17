@@ -254,4 +254,12 @@
     <string name="gui_opening">Abrindo %1$s…</string>
     <string name="gui_no_root">O UbuRoot está sem root: abra o UbuRoot primeiro</string>
     <string name="gui_failed">Não foi possível abrir %1$s: %2$s</string>
+    <string name="gpu_title">GPU</string>
+    <string name="gpu_none">Nenhuma GPU Adreno encontrada: os apps Linux desenham por software (llvmpipe).</string>
+    <string name="gpu_missing">%1$s encontrada. O driver Vulkan do Ubuntu não a alcança no Android, então os apps desenham por software. Instale o driver Turnip do Mesa compilado para o Android (cerca de 3 MB das releases do UbuRoot no GitHub, conferido com o SHA256SUMS da release).</string>
+    <string name="gpu_install">Instalar o driver da GPU</string>
+    <string name="gpu_installed">%1$s: Vulkan pelo Turnip do Mesa %2$s.</string>
+    <string name="gpu_zink">OpenGL na GPU (Zink). Vale para apps abertos depois.</string>
+    <string name="gpu_check">Ver o renderizador</string>
+    <string name="gpu_remove">Remover</string>
 </resources>

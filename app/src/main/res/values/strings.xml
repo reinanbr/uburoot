@@ -256,4 +256,12 @@
     <string name="gui_opening">Opening %1$s…</string>
     <string name="gui_no_root">UbuRoot has no root access: open UbuRoot first</string>
     <string name="gui_failed">Could not open %1$s: %2$s</string>
+    <string name="gpu_title">GPU</string>
+    <string name="gpu_none">No Adreno GPU found: Linux apps draw in software (llvmpipe).</string>
+    <string name="gpu_missing">%1$s found. Ubuntu\'s Vulkan driver can\'t reach it on Android, so apps draw in software. Install Mesa\'s Turnip driver built for Android (about 3 MB from UbuRoot\'s GitHub releases, checked against the release\'s SHA256SUMS).</string>
+    <string name="gpu_install">Install the GPU driver</string>
+    <string name="gpu_installed">%1$s: Vulkan through Mesa\'s Turnip %2$s.</string>
+    <string name="gpu_zink">OpenGL on the GPU (Zink). Applies to apps started afterwards.</string>
+    <string name="gpu_check">Check renderer</string>
+    <string name="gpu_remove">Remove</string>
 </resources>

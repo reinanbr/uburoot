@@ -28,9 +28,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +50,7 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import com.reinanbr.uburoot.R
+import com.reinanbr.uburoot.gui.GpuStatus
 import com.reinanbr.uburoot.gui.LaunchActivity
 import com.reinanbr.uburoot.gui.LinuxApp
 import com.reinanbr.uburoot.gui.LinuxApps
@@ -157,6 +160,7 @@ class LinuxAppsActivity : ComponentActivity() {
                     Text(stringResource(R.string.gui_stop))
                 }
             }
+            state.gpu?.let { GpuCard(state, it) }
             if (state.busy) CircularProgressIndicator()
             if (state.output.isNotEmpty()) {
                 Text(state.output, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
@@ -194,6 +198,47 @@ class LinuxAppsActivity : ComponentActivity() {
                 }
             }
             Text(app.name, style = MaterialTheme.typography.bodyLarge)
+        }
+    }
+
+    @Composable
+    private fun GpuCard(state: LinuxAppsState, g: GpuStatus) {
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(R.string.gpu_title), style = MaterialTheme.typography.titleMedium)
+            when {
+                !g.adreno -> Hint(stringResource(R.string.gpu_none))
+
+                !g.installed -> {
+                    Hint(stringResource(R.string.gpu_missing, g.model))
+                    OutlinedButton(
+                        onClick = vm::installGpu,
+                        enabled = !state.busy,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.gpu_install))
+                    }
+                    state.gpuProgress?.let {
+                        LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+
+                else -> {
+                    Hint(stringResource(R.string.gpu_installed, g.model, g.mesa))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.gpu_zink), Modifier.weight(1f))
+                        Switch(checked = g.zink, onCheckedChange = vm::setZink, enabled = !state.busy)
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = vm::checkRenderer, enabled = !state.busy) {
+                            Text(stringResource(R.string.gpu_check))
+                        }
+                        TextButton(onClick = vm::removeGpu, enabled = !state.busy) {
+                            Text(stringResource(R.string.gpu_remove))
+                        }
+                    }
+                    state.renderer.forEach { Text(it, fontFamily = FontFamily.Monospace, fontSize = 12.sp) }
+                }
+            }
         }
     }
 

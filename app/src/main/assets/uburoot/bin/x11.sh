@@ -364,7 +364,8 @@ stop() {
     return 0
 }
 
-# Desktop entries of type Application, not hidden, not terminal programs; the
+# Desktop entries of type Application, not hidden, not terminal programs, not limited
+# to some desktop (OnlyShowIn, e.g. XFCE's settings dialogs: this list isn't one); the
 # user's ~/.local/share/applications overrides the system's (same id).
 entries() { # USER -> ID|NAME|ICON|WMCLASS|FILE|EXEC (Exec last: it may hold a "|")
     _h=$(home_of "$1")
@@ -379,14 +380,14 @@ entries() { # USER -> ID|NAME|ICON|WMCLASS|FILE|EXEC (Exec last: it may hold a "
     [ $# -gt 0 ] || return 0
     bb awk '
         function flush() {
-            if (id != "" && type == "Application" && nod != "true" && hid != "true" && term != "true" && exec != "" && name != "")
+            if (id != "" && type == "Application" && nod != "true" && hid != "true" && term != "true" && only == "" && exec != "" && name != "")
                 e[id] = id "|" name "|" icon "|" wmc "|" file "|" exec
-            else if (id != "" && (nod == "true" || hid == "true")) delete e[id]
+            else if (id != "" && (nod == "true" || hid == "true" || only != "")) delete e[id]
         }
         FNR == 1 {
             if (NR > 1) flush()
             file = FILENAME; id = FILENAME; sub(/.*\//, "", id); sub(/\.desktop$/, "", id)
-            sec = ""; type = name = icon = exec = nod = hid = term = wmc = ""
+            sec = ""; type = name = icon = exec = nod = hid = term = wmc = only = ""
         }
         /^\[/ { sec = $0; next }
         sec != "[Desktop Entry]" { next }
@@ -397,6 +398,7 @@ entries() { # USER -> ID|NAME|ICON|WMCLASS|FILE|EXEC (Exec last: it may hold a "
         /^NoDisplay=/ { nod = substr($0, 11) }
         /^Hidden=/ { hid = substr($0, 8) }
         /^Terminal=/ { term = substr($0, 10) }
+        /^OnlyShowIn=/ { only = substr($0, 12) }
         /^StartupWMClass=/ { wmc = substr($0, 16); gsub(/\|/, "", wmc) }
         END { if (NR > 0) flush(); for (k in e) print e[k] }
     ' "$@" 2>/dev/null | bb grep -v '^$'

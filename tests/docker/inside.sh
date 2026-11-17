@@ -817,6 +817,7 @@ mkdir -p $A $R/usr/share/icons/hicolor/48x48/apps $R/usr/share/X11/xkb $R/home/t
 printf '[Desktop Entry]\nType=Application\nName=Fake GUI\nExec=sh -c "echo \\$DISPLAY \\$(id -un) >/tmp/gui-ran" %%U\nIcon=fakegui\n' >$A/fakegui.desktop
 printf '[Desktop Entry]\nType=Application\nName=Hidden\nExec=true\nNoDisplay=true\n' >$A/hidden.desktop
 printf '[Desktop Entry]\nType=Application\nName=Term\nExec=true\nTerminal=true\n' >$A/term.desktop
+printf '[Desktop Entry]\nType=Application\nName=Xfce only\nExec=true\nOnlyShowIn=XFCE;\n' >$A/xfceonly.desktop
 printf '[Desktop Entry]\nType=Application\nName=Mine\nExec=true\n[Desktop Action x]\nName=Other\n' >$R/home/tester/.local/share/applications/mine.desktop
 printf '[Desktop Entry]\nType=Application\nName=Outside\nExec=true\n' >/tmp/outside.desktop
 ln -sf /tmp/outside.desktop $R/home/tester/.local/share/applications/outside.desktop
@@ -846,7 +847,7 @@ h_xumount() {
     ! kill -0 "$_xp" 2>/dev/null && [ ! -e $R/tmp/.X11-unix/X0 ] && test "$(mounted_under $R)" = 0
 }
 check "x11.sh status: stopped, no window manager" h_xmissing
-check "x11.sh apps: GUI entries only (no hidden/terminal), user's own, no symlink out" h_xapps
+check "x11.sh apps: GUI entries only (no hidden/terminal/OnlyShowIn), user's own, no symlink out" h_xapps
 check "x11.sh icons: hicolor PNG as base64" h_xicons
 check "x11.sh run refuses bad ids and users" h_xbadid
 check "x11.sh start refuses without xkb-data" h_xnoxkb
@@ -914,7 +915,7 @@ check "x11.sh mozilla: key/source/pin root-owned, firefox from packages.mozilla.
 rm -f $R/usr/bin/wmctrl $R/usr/bin/startxfce4 $A/sw.desktop $R/tmp/wmctrl.log $R/tmp/desk-ran \
     $R/etc/apt/keyrings/packages.mozilla.org.asc $R/etc/apt/sources.list.d/mozilla.sources $R/etc/apt/preferences.d/80uburoot-mozilla
 check "umount.sh stops the X server" h_xumount
-rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
+rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $A/xfceonly.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
     $R/usr/share/icons/hicolor/48x48/apps/fakegui.png /data/local/uburoot/state/x11.prefs
 
 section "gpu.sh (GPU driver, fake Adreno)"

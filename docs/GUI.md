@@ -301,4 +301,6 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   (as anywhere). A headless run in a throwaway profile loaded `https://example.com/`.
   The first-run screen asks to accept Mozilla's terms: left to the user.
 - CJK text shows as boxes until a font such as `fonts-noto-cjk` is installed.
+- XFCE's settings dialogs and launchers (`OnlyShowIn=XFCE;`) stay out of the *Linux
+  apps* list: they appear in the desktop's own menu.
 - To remove it: `apt remove firefox`, then delete the three files above.

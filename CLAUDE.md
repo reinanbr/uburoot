@@ -619,6 +619,13 @@ Magisk itself does the same (its APK has `META-INF/com/google/android/update-bin
     `Package: firefox*` with an origin pin is fine (the glob problem was only version
     pins). Ubuntu Base has no CA list: `ca-certificates` first.
   - The XFCE clock shows UTC (no time zone from Android yet).
+  - XFCE adds ~25 entries with `OnlyShowIn=XFCE;` (its settings dialogs, About, Run…):
+    `x11.sh apps` leaves out any entry with `OnlyShowIn` (the list isn't a desktop).
+  - CI release APK of `70c2d22` on the S9: *Linux apps* listed the 5 open windows with
+    app icons; a tap raised Wireshark inside the XFCE session, ✕ closed GIMP's welcome
+    dialog, *Open the desktop* showed it. The *Install the desktop* / *Install Firefox*
+    buttons were not tapped (both installed from adb; they stream like *Install the
+    window tools*). Afterwards `umount.sh --kill`: 0 mounts, 1068 host mounts, 0 changes.
 - **Offline install / xz.** Magisk's busybox 1.36.1.1 `tar` has `-J` (checked on the
   S9). Ubuntu Base has no `ca-certificates`, so mirrors are `http://` only (apt checks
   the archive signatures anyway). The app copies a SAF file into its cache, then

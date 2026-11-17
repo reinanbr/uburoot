@@ -81,6 +81,9 @@ Available now:
   (`uburoot-audio`, `uburoot-camera`, `uburoot-sensors`, `uburoot-gps`). Changes are
   recorded and undone by *Stop all*; thermal, charger and battery settings stay
   read-only. Menu → *Hardware*. See [docs/HARDWARE.md](docs/HARDWARE.md).
+- **Linux apps**: graphical programs from Ubuntu (Wireshark, GIMP, editors…) open full
+  screen on the phone through [Termux:X11](https://github.com/termux/termux-x11), with a
+  home screen shortcut each. See [docs/GUI.md](docs/GUI.md).
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).
 - **Android integration**: `/sdcard`, `/data` and the system partitions are available

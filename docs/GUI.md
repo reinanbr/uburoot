@@ -83,3 +83,53 @@ screen and the shortcuts are the same for both; embedding later only changes whe
 Not decided here: Desktop mode (XFCE vs LXQt), GPU (Phase 4 step 3), Wireshark capture
 for a non-root user (`dumpcap` is `root:wireshark 0754` with file capabilities; how they
 combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verified).
+
+## Decision (owner, 2026-11-16): (a) now, (b) later
+
+### What UbuRoot does (`x11.sh`, *Linux apps* screen)
+
+- `x11.sh start`: mounts Ubuntu, finds Termux:X11 with `pm path com.termux.x11`, and
+  runs its `CmdEntryPoint` as root with `TMPDIR=$ROOTFS/tmp` and
+  `XKB_CONFIG_ROOT=$ROOTFS/usr/share/X11/xkb` (`--nice-name=uburoot-x11`, pid in
+  `state/x11.pid`, log `state/x11.log`). It closes an open Termux:X11 activity first
+  (`ACTION_STOP`): an activity still attached to an earlier server keeps that surface,
+  the new server fails `eglCreateWindowSurface` ("BufferQueueProducer … already
+  connected") and the screen freezes on the old frame (seen on the S9).
+- On the first start only, Termux:X11's preferences are set for a phone
+  (`am broadcast -a com.termux.x11.CHANGE_PREFERENCE`): `displayResolutionMode=scaled`,
+  `displayScale` = density × 100 / 240 (S9: 480 dpi → 200, an X screen of 720×1420), and
+  `touchMode=2` ("Simulated touchscreen": a tap is a click where you tap). The defaults
+  (native 1440×2960 at 96 dpi, touch as a trackpad) made Wireshark tiny and hard to use.
+  Later changes in Termux:X11's own preferences are kept.
+- A window manager makes each app full screen, like an Android app:
+  `matchbox-window-manager -use_titlebar no` (Ubuntu 1.2.3), installed by the screen's
+  button (`x11.sh setup`, apt) and started as the user with the server. Without one, X
+  windows open at their own size in the top-left corner and can't be moved.
+- `x11.sh apps|icons|run`: GUI `.desktop` entries (system + the user's
+  `~/.local/share/applications`; no `NoDisplay`, `Hidden` or `Terminal`), PNG icons from
+  `hicolor`/`pixmaps`, and `run USER ID` (field codes stripped, started detached as the
+  user with `DISPLAY=:0`). Every file read is checked to be inside the rootfs after
+  symlinks. The launcher script lives in root-owned `/run/uburoot-x11` (0755).
+- Login shells get `DISPLAY=:0` once the display has been used (`/etc/uburoot/x11`,
+  profile hook, rootfs schema 2).
+- `umount.sh` (Stop all, Repair mounts) stops the server: it lives outside the chroot
+  but listens in its `/tmp`.
+- App: menu → *Linux apps* (tap to open, hold to pin to the home screen with the app's
+  icon). The shortcut opens `LaunchActivity` (no window), which runs `x11.sh run` and
+  shows Termux:X11.
+
+### Evidence (S9, LineageOS 19.1, Termux:X11 nightly 1.03.01, 2026-11-16)
+
+- SELinux stayed **enforcing**: no denial; the activity logged "XCB connection is
+  successfull" and the server "new surface applied". So the README's `setenforce 0` is
+  not needed with Magisk (root runs in the permissive `u:r:magisk:s0`).
+- Wireshark 4.6.4 opened as `ana`, full screen at 200 %, taps worked.
+- Capture as a user: `dumpcap` is `root:wireshark 0754` with
+  `cap_net_admin,cap_net_raw=eip` (Ubuntu's `wireshark-common/install-setuid=true`).
+  File capabilities work on this Android kernel: after `usermod -aG wireshark ana` (a new
+  login) `dumpcap -D` listed wlan0, rmnet*, any, lo… and captured 9 packets on wlan0;
+  Wireshark showed live traffic per interface. Membership in `wireshark` means the user
+  can sniff every app's traffic on the phone (Android and Ubuntu share the network
+  namespace): the app does not add it by itself.
+- The S9's Wi-Fi has no monitor mode (Phase 3): Wireshark sees this phone's own traffic,
+  not other devices' Wi-Fi frames.

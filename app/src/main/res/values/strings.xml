@@ -242,4 +242,18 @@
     <string name="hw_gadget_off">Remove UbuRoot\'s functions</string>
     <string name="hw_gadget_confirm_title">Change the USB gadget?</string>
     <string name="hw_gadget_confirm_body">The USB port reconnects: a computer sees the new function next to adb, and adb over USB drops for a few seconds. Remove, Revert changes and Stop all put Android\'s configuration back.</string>
+    <string name="gui_title">Linux apps</string>
+    <string name="gui_hint">Tap an app to open it (as %1$s); hold it to add it to the home screen. Apps installed with apt appear here. In Termux:X11 a tap is a click, two fingers scroll, and Back shows the keyboard.</string>
+    <string name="gui_none">No graphical apps in Ubuntu yet. Install one in the terminal, e.g. sudo apt install wireshark</string>
+    <string name="gui_x11_needed">Linux windows are shown by Termux:X11, a free (GPL-3.0) companion app. It is published on GitHub only (not on F-Droid). Install it, then come back here.</string>
+    <string name="gui_x11_get">Get Termux:X11</string>
+    <string name="gui_x11_missing">Termux:X11 is not installed</string>
+    <string name="gui_wm_needed">Install the window manager so every app opens full screen, like an Android app (about 1 MB from Ubuntu).</string>
+    <string name="gui_wm_install">Install the window manager</string>
+    <string name="gui_stop">Stop the display (closes every Linux window)</string>
+    <string name="gui_pin">Add to home screen</string>
+    <string name="gui_pin_unsupported">This launcher cannot add shortcuts</string>
+    <string name="gui_opening">Opening %1$s…</string>
+    <string name="gui_no_root">UbuRoot has no root access: open UbuRoot first</string>
+    <string name="gui_failed">Could not open %1$s: %2$s</string>
 </resources>

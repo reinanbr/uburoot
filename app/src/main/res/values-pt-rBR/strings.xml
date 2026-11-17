@@ -240,4 +240,18 @@
     <string name="hw_gadget_off">Remover as funções do UbuRoot</string>
     <string name="hw_gadget_confirm_title">Alterar o gadget USB?</string>
     <string name="hw_gadget_confirm_body">A porta USB reconecta: um computador vê a nova função ao lado do adb, e o adb por USB cai por alguns segundos. Remover, Reverter alterações e Parar tudo devolvem a configuração do Android.</string>
+    <string name="gui_title">Apps Linux</string>
+    <string name="gui_hint">Toque num app para abri-lo (como %1$s); segure para pô-lo na tela inicial. Apps instalados com apt aparecem aqui. No Termux:X11 um toque é um clique, dois dedos rolam e Voltar mostra o teclado.</string>
+    <string name="gui_none">Ainda não há apps gráficos no Ubuntu. Instale um no terminal, por exemplo sudo apt install wireshark</string>
+    <string name="gui_x11_needed">As janelas do Linux são mostradas pelo Termux:X11, um app livre (GPL-3.0) que acompanha o UbuRoot. Ele só é publicado no GitHub (não no F-Droid). Instale-o e volte aqui.</string>
+    <string name="gui_x11_get">Baixar o Termux:X11</string>
+    <string name="gui_x11_missing">O Termux:X11 não está instalado</string>
+    <string name="gui_wm_needed">Instale o gerenciador de janelas para que cada app abra em tela cheia, como um app Android (cerca de 1 MB do Ubuntu).</string>
+    <string name="gui_wm_install">Instalar o gerenciador de janelas</string>
+    <string name="gui_stop">Parar a tela (fecha todas as janelas Linux)</string>
+    <string name="gui_pin">Adicionar à tela inicial</string>
+    <string name="gui_pin_unsupported">Este launcher não aceita atalhos</string>
+    <string name="gui_opening">Abrindo %1$s…</string>
+    <string name="gui_no_root">O UbuRoot está sem root: abra o UbuRoot primeiro</string>
+    <string name="gui_failed">Não foi possível abrir %1$s: %2$s</string>
 </resources>

@@ -29,6 +29,13 @@ if [ -n "$_w" ] && [ "$(readlink "/proc/$_w/root" 2>/dev/null)" = "$R" ]; then
     kill "$_w" 2>/dev/null
 fi
 
+# The X server (x11.sh) runs outside the chroot but listens in its /tmp.
+_x=$(cat "$UBU_STATE/x11.pid" 2>/dev/null)
+if [ -n "$_x" ] && bb grep -q uburoot-x11 "/proc/$_x/cmdline" 2>/dev/null; then
+    kill "$_x" 2>/dev/null
+    rm -f "$UBU_STATE/x11.pid" "$R/tmp/.X0-lock" "$R/tmp/.X11-unix/X0"
+fi
+
 if [ "$KILL" = 1 ]; then
     _pids=$(ubu_chroot_pids)
     if [ -n "$_pids" ]; then

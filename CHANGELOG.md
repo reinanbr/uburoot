@@ -44,6 +44,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
   gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
   root and the users granted the class.
+- **Linux apps** (menu → *Linux apps*): GUI programs installed in Ubuntu (Wireshark,
+  GIMP…) open full screen on the screen of Termux:X11, a GPL-3.0 companion app, with
+  touch as clicks and a size that fits the phone; hold one to add it to the home
+  screen. `x11.sh` starts the X server as root for Ubuntu; *Stop all* stops it. Login
+  shells get `DISPLAY=:0` once the display has been used.
 - **USB gadget** (`uburoot-hw gadget`, Hardware screen): a network link (NCM), a serial
   port (ACM), a keyboard and mouse (HID) and a disk image next to adb on the phone's USB
   port; recorded and undone like every other change.

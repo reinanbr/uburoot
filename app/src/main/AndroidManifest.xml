@@ -33,6 +33,11 @@
         android:label="@string/permission_cmd_label"
         android:protectionLevel="signature" />
 
+    <!-- Linux GUI apps open on Termux:X11's screen (docs/GUI.md). -->
+    <queries>
+        <package android:name="com.termux.x11" />
+    </queries>
+
     <application
         android:name=".UbuRootApp"
         android:allowBackup="false"
@@ -69,6 +74,20 @@
             android:name=".ui.KernelActivity"
             android:exported="false"
             android:label="@string/kernel_title" />
+
+        <activity
+            android:name=".ui.LinuxAppsActivity"
+            android:exported="false"
+            android:label="@string/gui_title" />
+
+        <!-- A Linux app's home screen shortcut: no window, opens Termux:X11. -->
+        <activity
+            android:name=".gui.LaunchActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <activity
             android:name=".ui.HardwareActivity"

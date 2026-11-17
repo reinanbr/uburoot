@@ -306,6 +306,11 @@ migrate_1() {
     write_groups
     write_iptables_select
 }
+# 1 -> 2: the profile hook sets DISPLAY=:0 for Linux GUI apps (x11.sh).
+# shellcheck disable=SC2317,SC2329
+migrate_2() {
+    ubu_write_profile_hook "$R"
+}
 
 if [ "$MIGRATE" = 1 ]; then
     _n=$((FROM + 1))

@@ -40,7 +40,7 @@ UBU_MODULE_SOURCES="/vendor_dlkm/lib/modules /vendor/lib/modules /system_dlkm/li
 # Version of the integration files setup.sh writes into the rootfs. Bump it
 # together with a new migrate_N in setup.sh; the app runs `setup.sh --migrate`
 # when /etc/uburoot-release has an older SCHEMA.
-UBU_SCHEMA=1
+UBU_SCHEMA=2
 UBU_PORTS_MIRROR_DEFAULT=http://ports.ubuntu.com/ubuntu-ports/
 
 if [ -x /system/bin/sh ]; then UBU_SH=/system/bin/sh; else UBU_SH="sh"; fi
@@ -481,6 +481,10 @@ if [ -n "${UBU_CWD:-}" ]; then
     cd "$UBU_CWD" 2>/dev/null || cd "$HOME" 2>/dev/null || cd /
 fi
 unset UBU_CWD
+# Linux GUI apps (x11.sh): once the X server has been used, its display is :0.
+if [ -z "${DISPLAY:-}" ] && [ -f /etc/uburoot/x11 ]; then
+    export DISPLAY=:0
+fi
 if [ -n "${UBU_INIT:-}" ]; then
     _ubu_init=$UBU_INIT
     unset UBU_INIT

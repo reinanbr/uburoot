@@ -70,6 +70,7 @@ import com.reinanbr.uburoot.R
 import com.reinanbr.uburoot.ui.AboutActivity
 import com.reinanbr.uburoot.ui.HardwareActivity
 import com.reinanbr.uburoot.ui.KernelActivity
+import com.reinanbr.uburoot.ui.LinuxAppsActivity
 import com.reinanbr.uburoot.ui.MainActivity
 import com.reinanbr.uburoot.ui.SettingsActivity
 import com.reinanbr.uburoot.ui.UbuRootTheme
@@ -317,6 +318,9 @@ class TerminalActivity : ComponentActivity() {
                     }
                     Item(R.string.hw_title) {
                         startActivity(Intent(this@TerminalActivity, HardwareActivity::class.java))
+                    }
+                    Item(R.string.gui_title) {
+                        startActivity(Intent(this@TerminalActivity, LinuxAppsActivity::class.java))
                     }
                     Item(R.string.about_title) {
                         startActivity(Intent(this@TerminalActivity, AboutActivity::class.java))

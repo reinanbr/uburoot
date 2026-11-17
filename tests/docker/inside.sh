@@ -163,9 +163,9 @@ rm -f /data/local/uburoot/uburoot.conf
 
 section "rootfs schema and migrations"
 REL=$R/etc/uburoot-release
-check "uburoot-release: SCHEMA=1" grep -qx SCHEMA=1 $REL
+check "uburoot-release: SCHEMA=2" grep -qx SCHEMA=2 $REL
 check "uburoot-release: UBUNTU and INSTALLED" sh -c "grep -q '^UBUNTU=.' $REL && grep -q '^INSTALLED=[0-9]' $REL"
-check "rootinfo: schema=1" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=1"
+check "rootinfo: schema=2" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=2"
 check "--migrate on a current rootfs is a no-op" sh -c "$B/setup.sh --migrate 2>&1 | grep -q 'up to date'"
 # What a rootfs set up by 0.2.x looks like: no release file, older or missing
 # integration files.
@@ -176,14 +176,14 @@ echo '# old hook' >$R/etc/profile.d/uburoot.sh
 chroot $R gpasswd -d root aid_net_raw >/dev/null 2>&1
 check "rootinfo: schema=0 on an old rootfs" sh -c "/system/bin/sh $B/rootinfo.sh 2>/dev/null | grep -qx schema=0"
 if $B/setup.sh --migrate >/tmp/migrate.log 2>&1; then ok "setup.sh --migrate"; else bad "setup.sh --migrate"; tail -20 /tmp/migrate.log; fi
-check "migrated: SCHEMA=1" grep -qx SCHEMA=1 $REL
-check "migrated: profile hook rewritten" grep -q UBU_CWD $R/etc/profile.d/uburoot.sh
+check "migrated: SCHEMA=2" grep -qx SCHEMA=2 $REL
+check "migrated: profile hook rewritten (with DISPLAY)" sh -c "grep -q UBU_CWD $R/etc/profile.d/uburoot.sh && grep -q DISPLAY=:0 $R/etc/profile.d/uburoot.sh"
 check "migrated: iptables selector back" test -x $R/usr/local/sbin/uburoot-iptables-select
 check "migrated: root back in aid_net_raw" sh -c "chroot $R id -Gn root | grep -qw aid_net_raw"
 check "migrated: users and APT sources untouched" sh -c "cmp -s /tmp/passwd.before $R/etc/passwd && cmp -s /tmp/sources.before $R/etc/apt/sources.list.d/ubuntu.sources"
 sed -i 's/^SCHEMA=.*/SCHEMA=99/' $REL
 check "--migrate leaves a newer rootfs alone" sh -c "$B/setup.sh --migrate 2>&1 | grep -q newer && grep -qx SCHEMA=99 $REL"
-sed -i 's/^SCHEMA=.*/SCHEMA=1/' $REL
+sed -i 's/^SCHEMA=.*/SCHEMA=2/' $REL
 mv $R/etc/uburoot-setup.done /tmp/setup.done
 check "--migrate refuses before setup has run" sh -c "! $B/setup.sh --migrate"
 mv /tmp/setup.done $R/etc/uburoot-setup.done
@@ -224,7 +224,7 @@ check "doctor runs (rc=$rc)" test "$rc" = 0
 check "doctor: every section" sh -c "for s in Root Android Kernel Hardware Storage Mounts Network Config; do grep -qx \"== \$s ==\" /tmp/doctor.txt || exit 1; done"
 check "doctor: summary line" grep -q '^summary: [0-9]* failed' /tmp/doctor.txt
 check "doctor: full root ok" grep -q '^full root: *\[ok\]' /tmp/doctor.txt
-check "doctor: schema ok" grep -q '^integration schema: *\[ok\] 1' /tmp/doctor.txt
+check "doctor: schema ok" grep -q '^integration schema: *\[ok\] 2' /tmp/doctor.txt
 check "doctor: vendor module vermagic" grep -q '^vendor vermagic: *4.9.337 SMP preempt mod_unload aarch64 (fake.ko)' /tmp/doctor.txt
 check "doctor: changed no mounts" test "$(mounted_under $R)" = "$n1"
 check "doctor (plain) names the user" grep -qw tester /tmp/doctor.txt
@@ -799,6 +799,59 @@ rm -f /data/local/uburoot/uburoot.conf
 h_off() { ! hout -y cpu governor policy0 performance 2>/dev/null && [ "$(cat $P/scaling_governor)" = schedutil ]; }
 check "changes refused with HARDWARE_ACCESS=0" h_off
 rm -f $R/usr/sbin/wpa_supplicant $R/etc/uburoot/hw-rules /tmp/hw
+
+section "x11.sh (Linux GUI apps, fake Termux:X11)"
+# A fake app_process: listens on $TMPDIR/.X11-unix/X0 like Termux:X11's X server.
+cat >/tmp/fake-app-process <<'EOF'
+#!/system/bin/sh
+exec perl -MSocket -e 'mkdir "$ENV{TMPDIR}/.X11-unix"; socket(S, AF_UNIX, SOCK_STREAM, 0) or die;
+    bind(S, pack_sockaddr_un("$ENV{TMPDIR}/.X11-unix/X0")) or die "bind: $!"; listen(S, 5); sleep 600' uburoot-x11
+EOF
+chmod 755 /tmp/fake-app-process
+xo() { env UBU_X11_APK=/fake/base.apk UBU_APP_PROCESS=/tmp/fake-app-process /system/bin/sh $B/x11.sh "$@"; }
+A=$R/usr/share/applications
+mkdir -p $A $R/usr/share/icons/hicolor/48x48/apps $R/usr/share/X11/xkb $R/home/tester/.local/share/applications
+printf '[Desktop Entry]\nType=Application\nName=Fake GUI\nExec=sh -c "echo \\$DISPLAY \\$(id -un) >/tmp/gui-ran" %%U\nIcon=fakegui\n' >$A/fakegui.desktop
+printf '[Desktop Entry]\nType=Application\nName=Hidden\nExec=true\nNoDisplay=true\n' >$A/hidden.desktop
+printf '[Desktop Entry]\nType=Application\nName=Term\nExec=true\nTerminal=true\n' >$A/term.desktop
+printf '[Desktop Entry]\nType=Application\nName=Mine\nExec=true\n[Desktop Action x]\nName=Other\n' >$R/home/tester/.local/share/applications/mine.desktop
+printf '[Desktop Entry]\nType=Application\nName=Outside\nExec=true\n' >/tmp/outside.desktop
+ln -sf /tmp/outside.desktop $R/home/tester/.local/share/applications/outside.desktop
+printf 'PNGDATA' >$R/usr/share/icons/hicolor/48x48/apps/fakegui.png
+h_xnoxkb() {
+    rmdir $R/usr/share/X11/xkb
+    ! xo start 2>/dev/null && [ ! -e $R/etc/uburoot/x11 ] && mkdir $R/usr/share/X11/xkb
+}
+h_xmissing() { xo status | grep -qx x11=stopped && xo status | grep -qx wm=missing; }
+h_xapps() {
+    [ "$(xo apps tester | cut -d'|' -f1 | tr '\n' ' ')" = "fakegui mine " ] &&
+        xo apps tester | grep -qx 'fakegui|Fake GUI|fakegui'
+}
+h_xicons() { [ "$(xo icons tester)" = "fakegui|$(printf PNGDATA | base64)" ]; }
+h_xbadid() { ! xo run tester '../x' 2>/dev/null && ! xo run tester nosuch 2>/dev/null && ! xo run 'a;b' fakegui 2>/dev/null; }
+h_xrun() {
+    rm -f $R/tmp/gui-ran
+    xo run tester fakegui >/dev/null 2>&1 || return 1
+    for _i in 1 2 3 4 5 6 7 8 9 10; do [ -s $R/tmp/gui-ran ] && break; sleep 1; done
+    [ "$(cat $R/tmp/gui-ran)" = ":0 tester" ] && [ -S $R/tmp/.X11-unix/X0 ] && xo status | grep -qx x11=running &&
+        [ -z "$(find $R/run/uburoot-x11 -name 'run.*' 2>/dev/null)" ]
+}
+h_xdisplay() { [ "$($B/enter.sh tester 'echo $DISPLAY' 2>/dev/null)" = ":0" ]; }
+h_xumount() {
+    _xp=$(cat /data/local/uburoot/state/x11.pid) && kill -0 "$_xp" || return 1
+    $B/umount.sh --kill >/dev/null 2>&1
+    ! kill -0 "$_xp" 2>/dev/null && [ ! -e $R/tmp/.X11-unix/X0 ] && test "$(mounted_under $R)" = 0
+}
+check "x11.sh status: stopped, no window manager" h_xmissing
+check "x11.sh apps: GUI entries only (no hidden/terminal), user's own, no symlink out" h_xapps
+check "x11.sh icons: hicolor PNG as base64" h_xicons
+check "x11.sh run refuses bad ids and users" h_xbadid
+check "x11.sh start refuses without xkb-data" h_xnoxkb
+check "x11.sh run: server up, app started as the user with DISPLAY=:0" h_xrun
+check "login shells get DISPLAY=:0 once the display was used" h_xdisplay
+check "umount.sh stops the X server" h_xumount
+rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
+    $R/usr/share/icons/hicolor/48x48/apps/fakegui.png /data/local/uburoot/state/x11.prefs
 
 section "uburoot-kbuild (fake kernel tree)"
 mkdir -p /tmp/ksrc

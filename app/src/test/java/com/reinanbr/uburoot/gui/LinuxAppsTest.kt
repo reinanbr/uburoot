@@ -31,6 +31,44 @@ class LinuxAppsTest {
         assertFalse(X11Status.parse(emptyList()).installed)
         assertEquals("root", LinuxApps.userOf(""))
         assertEquals("ana", LinuxApps.userOf("ana"))
+        // Older x11.sh (no switch=): the window tools count as missing.
+        assertTrue(s.toolsMissing)
+    }
+
+    @Test
+    fun parsesStatusExtras() {
+        val s = X11Status.parse(
+            listOf(
+                "x11=running",
+                "wm=xfce4-session",
+                "switch=yes",
+                "desktop=running",
+                "audio=ready",
+                "firefox=installed",
+            ),
+        )
+        assertTrue(s.running)
+        assertTrue(s.switch)
+        assertFalse(s.toolsMissing)
+        assertEquals("running", s.desktop)
+        assertEquals("installed", s.firefox)
+        assertTrue(X11Status.parse(listOf("x11=running", "wm=none", "switch=no")).toolsMissing)
+    }
+
+    @Test
+    fun parsesWindows() {
+        val w = LinuxApps.parseWindows(
+            listOf(
+                "0x00800006|org.wireshark.Wireshark|The Wireshark Network Analyzer",
+                "0x00c00003||A title | with a bar",
+                "nothex|x|y",
+                "0x12|only two",
+            ),
+        )
+        assertEquals(2, w.size)
+        assertEquals("org.wireshark.Wireshark", w[0].app)
+        assertEquals("", w[1].app)
+        assertEquals("A title | with a bar", w[1].title)
     }
 }
 

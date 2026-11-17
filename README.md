@@ -84,7 +84,9 @@ Available now:
 - **Linux apps**: graphical programs from Ubuntu (Wireshark, GIMP, editors…) open full
   screen on the phone through [Termux:X11](https://github.com/termux/termux-x11), with a
   home screen shortcut each, sound, and copy/paste with Android. On Adreno GPUs an
-  optional driver (Mesa's Turnip built for Android) runs OpenGL/Vulkan on the GPU. See
+  optional driver (Mesa's Turnip built for Android) runs OpenGL/Vulkan on the GPU.
+  Switch between open apps like on Android, or open a full XFCE desktop. Firefox
+  installs from Mozilla's own repository. See
   [docs/GUI.md](docs/GUI.md).
 - **Terminal**: a real PTY with job control, 256 colors and UTF-8 (Termux's terminal
   view).

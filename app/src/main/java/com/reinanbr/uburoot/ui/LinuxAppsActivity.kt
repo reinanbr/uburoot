@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -43,7 +44,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.pm.ShortcutInfoCompat
@@ -56,10 +60,13 @@ import com.reinanbr.uburoot.gui.LinuxApp
 import com.reinanbr.uburoot.gui.LinuxApps
 import com.reinanbr.uburoot.gui.LinuxAppsState
 import com.reinanbr.uburoot.gui.LinuxAppsViewModel
+import com.reinanbr.uburoot.gui.LinuxWindow
+import com.reinanbr.uburoot.gui.X11Status
 
 /**
  * Linux apps: the GUI programs installed in Ubuntu (their .desktop entries). Tap one to
- * open it on Termux:X11's screen; long-press to put it on the Android home screen.
+ * open it on Termux:X11's screen (or bring its window back); long-press to put it on the
+ * Android home screen. Also: the open windows, the XFCE desktop, Firefox from Mozilla.
  */
 class LinuxAppsActivity : ComponentActivity() {
     private val vm: LinuxAppsViewModel by viewModels()
@@ -148,31 +155,121 @@ class LinuxAppsActivity : ComponentActivity() {
                 ) { Text(stringResource(R.string.gui_x11_get)) }
                 return@Column
             }
-            if (s.wm == "missing") {
+            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { Top(state, s) }
+                if (state.windows.isNotEmpty()) {
+                    item { Title(stringResource(R.string.gui_windows)) }
+                    items(state.windows, key = { "w" + it.window }) { w ->
+                        WindowRow(w, state.icons[w.app], state.apps.firstOrNull { it.id == w.app }, !state.busy)
+                    }
+                }
+                item { Title(stringResource(R.string.gui_apps)) }
+                if (state.apps.isEmpty()) item { Hint(stringResource(R.string.gui_none)) }
+                items(state.apps, key = { it.id }) { app -> AppRow(app, state.icons[app.id], !state.busy) }
+                item { Extras(state, s) }
+                state.gpu?.let { g -> item { GpuCard(state, g) } }
+            }
+        }
+    }
+
+    /** Hints, the display's state, and the output of the last action. */
+    @Composable
+    private fun Top(state: LinuxAppsState, s: X11Status) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (s.toolsMissing) {
                 Hint(stringResource(R.string.gui_wm_needed))
                 OutlinedButton(onClick = vm::installWm, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.gui_wm_install))
                 }
             }
             Hint(stringResource(R.string.gui_hint, state.user))
-            if (s.x11 == "running") {
+            if (s.running) {
                 OutlinedButton(onClick = vm::stopDisplay, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.gui_stop))
                 }
             }
-            state.gpu?.let { GpuCard(state, it) }
             if (state.busy) CircularProgressIndicator()
             if (state.output.isNotEmpty()) {
                 Text(state.output, fontFamily = FontFamily.Monospace, fontSize = 12.sp)
             }
-            if (state.apps.isEmpty()) {
-                Hint(stringResource(R.string.gui_none))
+        }
+    }
+
+    /** The XFCE desktop and Firefox from Mozilla. */
+    @Composable
+    private fun Extras(state: LinuxAppsState, s: X11Status) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Title(stringResource(R.string.gui_desktop_title))
+            if (s.desktop == "missing") {
+                Hint(stringResource(R.string.gui_desktop_missing))
+                OutlinedButton(
+                    onClick = vm::installDesktop,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.gui_desktop_install))
+                }
+            } else {
+                Hint(stringResource(R.string.gui_desktop_hint))
+                Button(onClick = vm::openDesktop, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.gui_desktop_open))
+                }
             }
-            LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(state.apps, key = { it.id }) { app -> AppRow(app, state.icons[app.id], !state.busy) }
+            if (s.firefox != "installed") {
+                Title(stringResource(R.string.gui_firefox_title))
+                Hint(stringResource(R.string.gui_firefox_hint))
+                OutlinedButton(
+                    onClick = vm::installFirefox,
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.gui_firefox_install))
+                }
             }
         }
     }
+
+    @Composable
+    private fun WindowRow(w: LinuxWindow, icon: Bitmap?, app: LinuxApp?, enabled: Boolean) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { vm.focus(w) }
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            AppIcon(icon, app?.name ?: w.title)
+            Column(Modifier.weight(1f)) {
+                Text(
+                    w.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                app?.let { Text(it.name, style = MaterialTheme.typography.bodySmall) }
+            }
+            TextButton(onClick = { vm.close(w) }, enabled = enabled) {
+                Text("✕", fontSize = 18.sp, modifier = Modifier.semantics { contentDescription = closeLabel })
+            }
+        }
+    }
+
+    private val closeLabel get() = getString(R.string.gui_close)
+
+    @Composable
+    private fun AppIcon(icon: Bitmap?, name: String) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+            if (icon != null) {
+                Image(icon.asImageBitmap(), contentDescription = null, modifier = Modifier.size(40.dp))
+            } else {
+                Text(name.take(1).uppercase(), style = MaterialTheme.typography.titleLarge)
+            }
+        }
+    }
+
+    @Composable
+    private fun Title(text: String) = Text(text, style = MaterialTheme.typography.titleMedium)
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
@@ -190,13 +287,7 @@ class LinuxAppsActivity : ComponentActivity() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                if (icon != null) {
-                    Image(icon.asImageBitmap(), contentDescription = null, modifier = Modifier.size(40.dp))
-                } else {
-                    Text(app.name.take(1).uppercase(), style = MaterialTheme.typography.titleLarge)
-                }
-            }
+            AppIcon(icon, app.name)
             Text(app.name, style = MaterialTheme.typography.bodyLarge)
         }
     }
@@ -204,7 +295,7 @@ class LinuxAppsActivity : ComponentActivity() {
     @Composable
     private fun GpuCard(state: LinuxAppsState, g: GpuStatus) {
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(stringResource(R.string.gpu_title), style = MaterialTheme.typography.titleMedium)
+            Title(stringResource(R.string.gpu_title))
             when {
                 !g.adreno -> Hint(stringResource(R.string.gpu_none))
 

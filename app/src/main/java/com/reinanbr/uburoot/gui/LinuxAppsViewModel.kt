@@ -11,9 +11,9 @@ import com.reinanbr.uburoot.install.ConfigStore
 import com.reinanbr.uburoot.install.Downloader
 import com.reinanbr.uburoot.install.Http
 import com.reinanbr.uburoot.root.RootShell
-import com.reinanbr.uburoot.root.UbuPaths
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -28,6 +28,8 @@ data class LinuxAppsState(
     val status: X11Status? = null,
     val user: String = "root",
     val apps: List<LinuxApp> = emptyList(),
+    /** Open windows (with the X server running and wmctrl installed). */
+    val windows: List<LinuxWindow> = emptyList(),
     val icons: Map<String, Bitmap> = emptyMap(),
     val busy: Boolean = false,
     /** Output of the last action (installing the window manager, an error). */
@@ -53,7 +55,10 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
         val status = LinuxApps.status()
         val apps = LinuxApps.apps(user)
         val gpu = Gpu.status()
-        _state.update { it.copy(loading = false, status = status, user = user, apps = apps, gpu = gpu) }
+        val windows = if (status.running && status.switch) LinuxApps.windows(user) else emptyList()
+        _state.update {
+            it.copy(loading = false, status = status, user = user, apps = apps, gpu = gpu, windows = windows)
+        }
         val icons = withContext(Dispatchers.Default) {
             LinuxApps.icons(user).mapNotNull { (id, b64) ->
                 runCatching {
@@ -72,7 +77,7 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
             val r = LinuxApps.run(_state.value.user, app.id)
             _state.update { it.copy(busy = false, output = if (r.ok) "" else r.text.trim()) }
             if (r.ok) _opened.tryEmit(app.name)
-            _state.update { it.copy(status = LinuxApps.status()) }
+            refresh()
         }
     }
 
@@ -113,8 +118,42 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** apt-get install of the window manager (and xkb-data), shown as it runs. */
-    fun installWm() = stream("${UbuPaths.script("x11.sh")} setup")
+    /** apt-get install of the window tools (matchbox, wmctrl, xkb-data), shown as it runs. */
+    fun installWm() = stream(LinuxApps.setupCmd(desktop = false))
+
+    /** apt-get install of XFCE. */
+    fun installDesktop() = stream(LinuxApps.setupCmd(desktop = true))
+
+    /** Mozilla's APT repository + Firefox (the user tapped the button). */
+    fun installFirefox() = stream(LinuxApps.firefoxCmd)
+
+    /** Brings an open window to the front, then the screen opens Termux:X11. */
+    fun focus(w: LinuxWindow) = act(w.title) { LinuxApps.focus(w.window) }
+
+    fun openDesktop() = act("desktop") { LinuxApps.desktop(_state.value.user) }
+
+    /** Asks the window to close (the app may still ask to save). */
+    fun close(w: LinuxWindow) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, output = "") }
+        viewModelScope.launch {
+            val r = LinuxApps.close(w.window)
+            delay(800)
+            val windows = LinuxApps.windows(_state.value.user)
+            _state.update { it.copy(busy = false, windows = windows, output = if (r.ok) "" else r.text.trim()) }
+        }
+    }
+
+    private fun act(name: String, block: suspend () -> RootShell.Result) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, output = "") }
+        viewModelScope.launch {
+            val r = block()
+            _state.update { it.copy(busy = false, output = if (r.ok) "" else r.text.trim()) }
+            if (r.ok) _opened.tryEmit(name)
+            refresh()
+        }
+    }
 
     fun stopDisplay() {
         if (_state.value.busy) return

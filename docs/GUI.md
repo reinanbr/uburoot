@@ -231,11 +231,74 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
 | Mousepad 0.7.0 | full screen, typing from Android works |
 | glmark2 / vkcube | GPU path, numbers above |
 | Epiphany 49.2 | blocked by its sandbox (above) |
+| Firefox 160 (Mozilla's repository) | runs; HTTPS page loaded; content processes under seccomp (part 3) |
 | Ghidra | not packaged by Ubuntu (upstream zip + JDK 21): not tested |
 | gqrx 2.17.7 | needs an RTL-SDR dongle: not tested |
 
 ### Still open
 
-- Switching between several running apps: matchbox shows the newest window. Opening an
-  app that is already running starts it again unless it is single-instance over D-Bus.
-- Desktop mode (XFCE vs LXQt), DRI3/zero-copy presentation, embedding Termux:X11.
+- DRI3/zero-copy presentation, embedding Termux:X11 (one Android task per Linux app).
+
+## Part 3: switching apps, desktop mode, Firefox (2026-11-16)
+
+### Switching between open apps
+
+- matchbox shows one window at a time and has no switcher of its own once its title
+  bar is off. It does implement EWMH: `_NET_CLIENT_LIST`, and `_NET_ACTIVE_WINDOW` /
+  `_NET_CLOSE_WINDOW` sent to the root window (`ewmh_handle_root_message` in
+  matchbox-window-manager 1.2.3's `src/ewmh.c`). So `wmctrl` (now installed by
+  `x11.sh setup`) lists, raises and closes windows. xfwm4 supports the same.
+- `x11.sh windows USER` lists the open windows as `WINDOW|ID|TITLE`. Each one is matched
+  to its desktop entry by WM_CLASS against the entry's `StartupWMClass`, its id, its
+  Exec program, then the id's last part. On the S9: Wireshark, Mousepad, GIMP (and its
+  welcome dialog), Firefox all matched.
+- Like an Android app, opening an app that already has a window brings that window to
+  the front instead of starting it again: `x11.sh run` does it for the *Linux apps*
+  screen and the home screen shortcuts alike (0.8 s on the S9).
+- The *Linux apps* screen lists the open windows (tap: front, ✕: close; the app may
+  still ask to save).
+- One Android task per Linux app (the spec's "app mode" ideal) needs a display path
+  with a surface per window. Termux:X11 has one surface, so it waits for embedding.
+
+### Desktop mode: XFCE
+
+- XFCE over LXQt. On a clean Ubuntu 26.04 rootfs, without recommends:
+  `xfce4 xfce4-terminal` = 211 packages, 90 MB to download; `lxqt-core qterminal` =
+  318 packages, 156 MB. XFCE is GTK, like GIMP, Mousepad and Wireshark's own deps
+  already pull in. On the S9 (with GIMP installed) it was 46 packages, 8 MB. The running
+  session took 9 processes, 199 MB RSS.
+- `x11.sh setup desktop` installs it; `x11.sh desktop USER` stops matchbox and runs
+  `startxfce4` as the user (with the session bus from part 2, so it starts no
+  `dbus-launch` of its own). The windows already open stay open: they show up in the
+  panel's window list. Apps opened from the *Linux apps* screen meanwhile appear as
+  windows (no matchbox is started while another WM runs). *Stop the display* ends it.
+  Started in 4.8 s on the S9.
+- Localhost only: the X server listens on a Unix socket inside the rootfs, never on the
+  network. LAN access (VNC with a password, as the spec allows as an opt-in) is not
+  done.
+- The panel clock shows UTC: Ubuntu's `/etc/localtime` is UTC and Android's time zone
+  (`persist.sys.timezone`) isn't carried over yet.
+
+### Firefox from Mozilla's repository
+
+- `x11.sh mozilla` (or `x11.sh firefox`, which also installs it) runs only when the user
+  asks (the *Linux apps* screen's button). It installs `ca-certificates` (Ubuntu Base has
+  none, and the repository is HTTPS-only), then writes:
+  - `/etc/apt/keyrings/packages.mozilla.org.asc`: the key from
+    `https://packages.mozilla.org/apt/repo-signing-key.gpg`, embedded in the script.
+    Fingerprint `35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3`, as Mozilla's post
+    "Firefox Developer Edition and Beta: Try out Mozilla's .deb package!" (hacks.mozilla.org,
+    2023-11) publishes it; RSA 2048 from 2021, no expiry. `gpgv` verified the repository's
+    `InRelease` with it (2026-11-16).
+  - `/etc/apt/sources.list.d/mozilla.sources`: `https://packages.mozilla.org/apt`,
+    suite `mozilla`, component `main` (the `Release` file lists `all amd64 arm64`).
+  - `/etc/apt/preferences.d/80uburoot-mozilla`: `firefox*` from that origin at 1000, so
+    the repository can't replace anything but Mozilla's own packages.
+- S9: `firefox 160.0~build1` arm64, 84 MB, from packages.mozilla.org; Ubuntu 26.04's apt
+  accepted the key. Firefox opened full screen. Its sandbox logged
+  `CanCreateUserNamespace() clone() failure: EPERM` and went on without that layer: the
+  8 child processes run with a seccomp filter (`Seccomp: 2`), the main process doesn't
+  (as anywhere). A headless run in a throwaway profile loaded `https://example.com/`.
+  The first-run screen asks to accept Mozilla's terms: left to the user.
+- CJK text shows as boxes until a font such as `fonts-noto-cjk` is installed.
+- To remove it: `apt remove firefox`, then delete the three files above.

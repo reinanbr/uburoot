@@ -44,6 +44,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
   gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
   root and the users granted the class.
+- Switch between open Linux apps: the *Linux apps* screen lists the open windows (tap
+  to bring one back, ✕ to close it), and opening an app that is already open shows its
+  window instead of starting it again, also from home screen shortcuts.
+- **Desktop mode**: a full XFCE desktop (*Linux apps* → *Desktop*), for when you want
+  windows side by side, a panel and a file manager.
+- **Firefox**: *Linux apps* → *Install Firefox from Mozilla* adds Mozilla's own APT
+  repository (Ubuntu's package is a snap, which can't run here) and installs it.
 - **GPU for Linux apps** on Adreno: *Linux apps* → *Install the GPU driver* downloads
   Mesa's Turnip built for Android's GPU driver (KGSL), published with each release and
   checked against `SHA256SUMS`. OpenGL then runs on the GPU through Zink; the screen

@@ -852,6 +852,67 @@ check "x11.sh run refuses bad ids and users" h_xbadid
 check "x11.sh start refuses without xkb-data" h_xnoxkb
 check "x11.sh run: server up, app started as the user with DISPLAY=:0" h_xrun
 check "login shells get DISPLAY=:0 once the display was used" h_xdisplay
+# A fake wmctrl: the window list of `-l -x`, every other call logged.
+cat >$R/usr/bin/wmctrl <<'EOF'
+#!/bin/sh
+if [ "$*" = "-l -x" ]; then
+    echo '0x00400003  1 fakegui.Fakegui  host Fake | window'
+    echo '0x00500001 -1 xfce4-panel.Xfce4-panel  host xfce4-panel'
+    echo '0x00600002  0 org.example.Mine.Mine  host Mine doc'
+    echo '0x00700002  0 unknown.Unknown  host Something'
+    echo '0x00800001  0 special.SpecialWM  host Special'
+    exit 0
+fi
+echo "$DISPLAY $*" >>/tmp/wmctrl.log
+EOF
+chmod 755 $R/usr/bin/wmctrl
+printf '[Desktop Entry]\nType=Application\nName=Special\nExec=true\nStartupWMClass=SpecialWM\n' >$A/sw.desktop
+h_xwindows() {
+    [ "$(xo windows tester)" = "0x00400003|fakegui|Fake / window
+0x00600002|mine|Mine doc
+0x00700002||Something
+0x00800001|sw|Special" ] && xo status | grep -qx switch=yes
+}
+h_xreuse() {
+    rm -f $R/tmp/wmctrl.log $R/tmp/gui-ran
+    xo run tester fakegui 2>&1 | grep -q 'switched to fakegui' &&
+        [ "$(cat $R/tmp/wmctrl.log)" = ":0 -i -a 0x00400003" ] && sleep 2 && [ ! -e $R/tmp/gui-ran ]
+}
+h_xfocus() {
+    rm -f $R/tmp/wmctrl.log
+    ! xo focus 'x;y' 2>/dev/null && ! xo focus 0xzz 2>/dev/null && ! xo close 0x 2>/dev/null &&
+        xo focus 0x00800001 && xo close 0x00600002 &&
+        [ "$(cat $R/tmp/wmctrl.log)" = ":0 -i -a 0x00800001
+:0 -i -c 0x00600002" ]
+}
+h_xdesktop() {
+    xo status | grep -qx desktop=missing || return 1
+    if xo desktop tester 2>/dev/null; then return 1; fi
+    printf '#!/bin/sh\necho "$DISPLAY $(id -un) $DBUS_SESSION_BUS_ADDRESS" >/tmp/desk-ran\n' >$R/usr/bin/startxfce4
+    chmod 755 $R/usr/bin/startxfce4
+    xo desktop tester 2>&1 | grep -q 'desktop started as tester' || return 1
+    for _i in 1 2 3 4 5; do [ -s $R/tmp/desk-ran ] && break; sleep 1; done
+    xo status | grep -qx desktop=ready && grep -q '^:0 tester' $R/tmp/desk-ran
+}
+h_xmozilla() {
+    xo status | grep -qx firefox=missing || return 1
+    if ! xo mozilla >/tmp/moz.log 2>&1; then
+        tail -5 /tmp/moz.log
+        return 1
+    fi
+    for _f in etc/apt/keyrings/packages.mozilla.org.asc etc/apt/sources.list.d/mozilla.sources etc/apt/preferences.d/80uburoot-mozilla; do
+        [ "$(stat -c %u:%a $R/$_f)" = 0:644 ] || return 1
+    done
+    _pol=$($B/enter.sh root 'apt-cache policy firefox' 2>/dev/null)
+    echo "$_pol" | grep -q 'packages.mozilla.org' && ! echo "$_pol" | grep 'Candidate:' | grep -q -e snap -e '(none)'
+}
+check "x11.sh windows: open windows matched to their apps (WM_CLASS), panels left out" h_xwindows
+check "x11.sh run of an open app brings its window back (no second start)" h_xreuse
+check "x11.sh focus/close: window ids checked, wmctrl called" h_xfocus
+check "x11.sh desktop: refused without XFCE, then startxfce4 as the user" h_xdesktop
+check "x11.sh mozilla: key/source/pin root-owned, firefox from packages.mozilla.org" h_xmozilla
+rm -f $R/usr/bin/wmctrl $R/usr/bin/startxfce4 $A/sw.desktop $R/tmp/wmctrl.log $R/tmp/desk-ran \
+    $R/etc/apt/keyrings/packages.mozilla.org.asc $R/etc/apt/sources.list.d/mozilla.sources $R/etc/apt/preferences.d/80uburoot-mozilla
 check "umount.sh stops the X server" h_xumount
 rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
     $R/usr/share/icons/hicolor/48x48/apps/fakegui.png /data/local/uburoot/state/x11.prefs

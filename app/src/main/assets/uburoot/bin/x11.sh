@@ -9,13 +9,20 @@
 # environment").
 #
 # Usage: x11.sh status                 x11=missing|stopped|running, wm=NAME|none|missing,
-#                                      audio=missing|bridge-off|ready
+#                                      switch=yes|no, desktop=missing|ready|running,
+#                                      audio=missing|bridge-off|ready, firefox=installed|missing
 #        x11.sh start                  mount, start the server (+ a window manager)
 #        x11.sh stop                   stop the server (umount.sh does it too)
 #        x11.sh apps [USER]            ID|NAME|ICON for each GUI .desktop entry
 #        x11.sh icons [USER]           ID|BASE64 of each entry's PNG icon (if any)
-#        x11.sh run USER ID            start, then open the entry ID as USER
-#        x11.sh setup                  install the window manager (apt)
+#        x11.sh run USER ID            start, then open the entry ID as USER; if it already
+#                                      has a window, bring that window to the front
+#        x11.sh windows [USER]         WINDOW|ID|TITLE of each open window (ID: its entry)
+#        x11.sh focus|close WINDOW     bring a window to the front / ask it to close
+#        x11.sh desktop USER           the XFCE desktop session (replaces the app mode WM)
+#        x11.sh setup [desktop]        install the window tools, or the desktop (apt)
+#        x11.sh mozilla                add Mozilla's APT repository (for Firefox)
+#        x11.sh firefox                mozilla, then apt install firefox
 set -u
 UBU_BIN_DIR=$(cd -P -- "$(dirname -- "$0")" && pwd -P)
 # shellcheck source=common.sh
@@ -53,6 +60,13 @@ wm_running() {
     ls -l /proc/[0-9]*/exe 2>/dev/null | bb awk -v names="$WMS" '
         BEGIN { n = split(names, w, " ") }
         $(NF - 1) == "->" { for (i = 1; i <= n; i++) if ($NF ~ ("/usr/bin/" w[i] "$")) { print w[i]; exit } }'
+}
+
+# Processes running Ubuntu's /usr/bin/NAME.
+pids_of() { # NAME
+    # shellcheck disable=SC2012 # symlink targets of /proc/*/exe
+    ls -l /proc/[0-9]*/exe 2>/dev/null | bb awk -v n="$1" -v r="$R" '
+        $(NF - 1) == "->" && ($NF == r "/usr/bin/" n || $NF == "/usr/bin/" n) { split($(NF - 2), a, "/"); print a[3] }'
 }
 
 user_ok() {
@@ -126,7 +140,7 @@ start_wm() { # USER
     as_user_bg "$1" "$WM -use_titlebar no"
 }
 
-start() { # [USER]
+start() { # [USER [nowm]]
     ubu_rootfs_installed || ubu_die "Ubuntu is not installed"
     _apk=$(apk)
     [ -n "$_apk" ] || ubu_die "Termux:X11 is not installed (https://github.com/termux/termux-x11/releases)"
@@ -158,7 +172,167 @@ start() { # [USER]
         done
         [ -S "$SOCK" ] || ubu_die "the X server did not start (log: $UBU_STATE/x11.log)"
     fi
-    start_wm "${1:-${DEFAULT_USER:-root}}"
+    [ "${2:-}" = nowm ] || start_wm "${1:-${DEFAULT_USER:-root}}"
+}
+
+# A command against the X server, as root inside Ubuntu (a running server means
+# start() mounted Ubuntu).
+xrun() {
+    if ! running || [ ! -e "$R/proc/self" ]; then return 1; fi
+    bb chroot "$R" /usr/bin/env -i DISPLAY=:0 PATH=/usr/bin:/bin HOME=/root "$@" 2>/dev/null
+}
+
+# Open windows (wmctrl, EWMH; matchbox and xfwm4 both support it), each matched to
+# the desktop entry it belongs to: by StartupWMClass, entry id, the Exec program or
+# the id's last part, against WM_CLASS (wmctrl prints "instance.class"). Panels and
+# the desktop itself (sticky, desktop -1) are left out.
+windows() { # USER -> WINDOW|ID|TITLE
+    [ -x "$R/usr/bin/wmctrl" ] || return 0
+    _wl=$(xrun wmctrl -l -x) || return 0
+    [ -n "$_wl" ] || return 0
+    { entries "$1"; echo '#windows'; printf '%s\n' "$_wl"; } | bb awk '
+        function m(cls, s) {
+            if (length(s) < 3) return 0
+            if (cls == s || index(cls, s ".") == 1) return 1
+            return length(cls) > length(s) && substr(cls, length(cls) - length(s)) == "." s
+        }
+        $0 == "#windows" { w = 1; next }
+        !w {
+            split($0, f, "|"); n++; eid[n] = f[1]
+            c[n, 1] = tolower(f[4]); c[n, 2] = tolower(f[1])
+            ex = $0; for (i = 0; i < 5; i++) ex = substr(ex, index(ex, "|") + 1)
+            split(ex, a, " "); x = a[1]; sub(/.*\//, "", x)
+            if (x ~ /^(env|sh|bash|python3?|java|flatpak)$/ || x ~ /=/) x = ""
+            c[n, 3] = tolower(x)
+            l = f[1]; sub(/.*\./, "", l); c[n, 4] = tolower(l)
+            next
+        }
+        {
+            split($0, f, " ")
+            if (f[2] == "-1" || f[1] !~ /^0x[0-9a-f]+$/) next
+            cls = tolower(f[3]); t = $0
+            for (i = 0; i < 4; i++) sub(/^[^ ]+ +/, "", t)
+            gsub(/\|/, "/", t)
+            app = ""
+            for (k = 1; k <= 4 && app == ""; k++)
+                for (i = 1; i <= n; i++) if (m(cls, c[i, k])) { app = eid[i]; break }
+            print f[1] "|" app "|" t
+        }'
+}
+
+window_cmd() { # -a|-c WINDOW
+    case "$2" in 0x*) ;; *) ubu_die "invalid window: $2" ;; esac
+    case "${2#0x}" in '' | *[!0-9a-fA-F]*) ubu_die "invalid window: $2" ;; esac
+    [ -x "$R/usr/bin/wmctrl" ] || ubu_die "wmctrl is missing in Ubuntu: x11.sh setup"
+    xrun wmctrl -i "$1" "$2" || ubu_die "no window $2"
+}
+
+# Desktop mode: an XFCE session (docs/GUI.md: XFCE over LXQt). It takes over from the
+# app mode's matchbox; the windows already open stay open.
+desktop_state() {
+    if [ -n "$(pids_of xfce4-session)" ]; then
+        echo running
+    elif [ -x "$R/usr/bin/startxfce4" ]; then
+        echo ready
+    else
+        echo missing
+    fi
+}
+
+desktop() { # USER
+    user_ok "$1"
+    [ -x "$R/usr/bin/startxfce4" ] || ubu_die "the desktop is not installed (x11.sh setup desktop)"
+    start "$1" nowm
+    if [ "$(desktop_state)" = running ]; then
+        ubu_log "the desktop is running"
+        return 0
+    fi
+    _p=$(pids_of "$WM")
+    # shellcheck disable=SC2086 # a list of pids
+    [ -z "$_p" ] || kill $_p 2>/dev/null
+    start_audio "$1"
+    as_user_bg "$1" startxfce4 || ubu_die "could not start the desktop"
+    ubu_log "desktop started as $1"
+}
+
+# Firefox: Ubuntu's firefox deb only installs the snap (blocked by setup.sh's
+# 80uburoot-no-snap), so it comes from Mozilla's own APT repository, added only when
+# the user asks for it. Key: https://packages.mozilla.org/apt/repo-signing-key.gpg,
+# fingerprint 35BAA0B33E9EB396F59CA838C0BA5CE6DC6315A3 as Mozilla publishes it (checked
+# 2026-11-16; it has no expiry). Its Packages lists arm64 and amd64.
+MOZ_KEY=etc/apt/keyrings/packages.mozilla.org.asc
+MOZ_SRC=etc/apt/sources.list.d/mozilla.sources
+MOZ_PIN=etc/apt/preferences.d/80uburoot-mozilla
+
+safe_dir() { # DIR inside the rootfs, resolving to itself (no symlink out of it)
+    mkdir -p "$R/$1" || return 1
+    _rp=$(readlink -f "$R/$1") || return 1
+    [ "$_rp" = "$(readlink -f "$R")/$1" ]
+}
+
+put() { # FILE (stdin -> $R/FILE, root 0644)
+    cat >"$R/$1.new" && chown 0:0 "$R/$1.new" && chmod 644 "$R/$1.new" && mv -f "$R/$1.new" "$R/$1"
+}
+
+mozilla() {
+    ubu_rootfs_installed || ubu_die "Ubuntu is not installed"
+    "$UBU_BIN_DIR/mount.sh" >/dev/null 2>&1 || ubu_die "mount.sh failed"
+    # HTTPS needs the CA list, which Ubuntu Base doesn't have.
+    if [ ! -f "$R/etc/ssl/certs/ca-certificates.crt" ]; then
+        "$UBU_BIN_DIR/enter.sh" root "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates" ||
+            ubu_die "could not install ca-certificates"
+    fi
+    for _d in etc/apt/keyrings etc/apt/sources.list.d etc/apt/preferences.d; do
+        safe_dir "$_d" || ubu_die "unsafe directory /$_d in Ubuntu"
+    done
+    put "$MOZ_KEY" <<'EOF' || ubu_die "cannot write /$MOZ_KEY"
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+xsBNBGCRt7MBCADkYJHHQQoL6tKrW/LbmfR9ljz7ib2aWno4JO3VKQvLwjyUMPpq
+/SXXMOnx8jXwgWizpPxQYDRJ0SQXS9ULJ1hXRL/OgMnZAYvYDeV2jBnKsAIEdiG/
+e1qm8P4W9qpWJc+hNq7FOT13RzGWRx57SdLWSXo0KeY38r9lvjjOmT/cuOcmjwlD
+T9XYf/RSO+yJ/AsyMdAr+ZbDeQUd9HYJiPdI04lGaGM02MjDMnx+monc+y54t+Z+
+ry1WtQdzoQt9dHlIPlV1tR+xV5DHHsejCZxu9TWzzSlL5wfBBeEz7R/OIzivGJpW
+QdJzd+2QDXSRg9q2XYWP5ZVtSgjVVJjNlb6ZABEBAAHNVEFydGlmYWN0IFJlZ2lz
+dHJ5IFJlcG9zaXRvcnkgU2lnbmVyIDxhcnRpZmFjdC1yZWdpc3RyeS1yZXBvc2l0
+b3J5LXNpZ25lckBnb29nbGUuY29tPsLAjgQTAQoAOBYhBDW6oLM+nrOW9ZyoOMC6
+XObcYxWjBQJgkbezAhsDBQsJCAcCBhUKCQgLAgQWAgMBAh4BAheAAAoJEMC6XObc
+YxWj+igIAMFh6DrAYMeq9sbZ1ZG6oAMrinUheGQbEqe76nIDQNsZnhDwZ2wWqgVC
+7DgOMqlhQmOmzm7M6Nzmq2dvPwq3xC2OeI9fQyzjT72deBTzLP7PJok9PJFOMdLf
+ILSsUnmMsheQt4DUO0jYAX2KUuWOIXXJaZ319QyoRNBPYa5qz7qXS7wHLOY89IDq
+fHt6Aud8ER5zhyOyhytcYMeaGC1g1IKWmgewnhEq02FantMJGlmmFi2eA0EPD02G
+C3742QGqRxLwjWsm5/TpyuU24EYKRGCRm7QdVIo3ugFSetKrn0byOxWGBvtu4fH8
+XWvZkRT+u+yzH1s5yFYBqc2JTrrJvRU=
+=QnvN
+-----END PGP PUBLIC KEY BLOCK-----
+EOF
+    put "$MOZ_SRC" <<EOF || ubu_die "cannot write /$MOZ_SRC"
+# Added by UbuRoot (x11.sh mozilla) at the user's request: Firefox from Mozilla.
+Types: deb
+URIs: https://packages.mozilla.org/apt
+Suites: mozilla
+Components: main
+Signed-By: /$MOZ_KEY
+EOF
+    # Only Mozilla's own packages: the repository can't replace anything else.
+    put "$MOZ_PIN" <<'EOF' || ubu_die "cannot write /$MOZ_PIN"
+Explanation: UbuRoot: Firefox from Mozilla's repository (x11.sh mozilla)
+Package: firefox*
+Pin: origin packages.mozilla.org
+Pin-Priority: 1000
+EOF
+    "$UBU_BIN_DIR/enter.sh" root "apt-get update" || ubu_die "apt-get update failed"
+    ubu_log "Mozilla's repository added"
+}
+
+firefox_state() {
+    if [ -e "$R/usr/lib/firefox/firefox" ]; then echo installed; else echo missing; fi
+}
+
+firefox() {
+    mozilla
+    "$UBU_BIN_DIR/enter.sh" root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends firefox" ||
+        ubu_die "could not install Firefox"
 }
 
 # Sound: with PulseAudio installed in Ubuntu and the app's audio bridge on (Hardware >
@@ -192,7 +366,7 @@ stop() {
 
 # Desktop entries of type Application, not hidden, not terminal programs; the
 # user's ~/.local/share/applications overrides the system's (same id).
-entries() { # USER -> ID|NAME|ICON|EXEC|FILE
+entries() { # USER -> ID|NAME|ICON|WMCLASS|FILE|EXEC (Exec last: it may hold a "|")
     _h=$(home_of "$1")
     _dirs="$R/usr/share/applications"
     [ -n "$_h" ] && _dirs="$_dirs $R$_h/.local/share/applications"
@@ -206,13 +380,13 @@ entries() { # USER -> ID|NAME|ICON|EXEC|FILE
     bb awk '
         function flush() {
             if (id != "" && type == "Application" && nod != "true" && hid != "true" && term != "true" && exec != "" && name != "")
-                e[id] = id "|" name "|" icon "|" exec "|" file
+                e[id] = id "|" name "|" icon "|" wmc "|" file "|" exec
             else if (id != "" && (nod == "true" || hid == "true")) delete e[id]
         }
         FNR == 1 {
             if (NR > 1) flush()
             file = FILENAME; id = FILENAME; sub(/.*\//, "", id); sub(/\.desktop$/, "", id)
-            sec = ""; type = name = icon = exec = nod = hid = term = ""
+            sec = ""; type = name = icon = exec = nod = hid = term = wmc = ""
         }
         /^\[/ { sec = $0; next }
         sec != "[Desktop Entry]" { next }
@@ -223,6 +397,7 @@ entries() { # USER -> ID|NAME|ICON|EXEC|FILE
         /^NoDisplay=/ { nod = substr($0, 11) }
         /^Hidden=/ { hid = substr($0, 8) }
         /^Terminal=/ { term = substr($0, 10) }
+        /^StartupWMClass=/ { wmc = substr($0, 16); gsub(/\|/, "", wmc) }
         END { if (NR > 0) flush(); for (k in e) print e[k] }
     ' "$@" 2>/dev/null | bb grep -v '^$'
 }
@@ -267,7 +442,16 @@ run() { # USER ID
     _e=$(entries "$1" | bb awk -F'|' -v id="$2" '$1 == id { print; exit }')
     [ -n "$_e" ] || ubu_die "no application $2"
     # Exec field codes (%f %U ...) are for files/URLs we don't pass; %% is a %.
-    _x=$(printf '%s\n' "$_e" | bb awk -F'|' '{ print $4 }' | bb sed -e 's/%[fFuUdDnNickvm]//g' -e 's/%%/%/g')
+    _x=$(printf '%s\n' "$_e" | bb awk '{ for (i = 0; i < 5; i++) $0 = substr($0, index($0, "|") + 1); print }' |
+        bb sed -e 's/%[fFuUdDnNickvm]//g' -e 's/%%/%/g')
+    # Like an Android app: if it already has a window, show that one.
+    if running; then
+        _w=$(windows "$1" | bb awk -F'|' -v id="$2" '$2 == id { w = $1 } END { if (w != "") print w }')
+        if [ -n "$_w" ] && xrun wmctrl -i -a "$_w"; then
+            ubu_log "switched to $2"
+            return 0
+        fi
+    fi
     start "$1"
     start_audio "$1"
     as_user_bg "$1" "$_x" || ubu_die "could not start $2"
@@ -290,12 +474,20 @@ status() {
     else
         echo "wm=missing"
     fi
+    if [ -x "$R/usr/bin/wmctrl" ]; then echo "switch=yes"; else echo "switch=no"; fi
+    echo "desktop=$(desktop_state)"
     echo "audio=$(audio_state)"
+    echo "firefox=$(firefox_state)"
 }
 
-setup() {
+setup() { # [desktop]
+    case "${1:-}" in
+        '') _p="$WM xkb-data wmctrl" ;;
+        desktop) _p="xfce4 xfce4-terminal xkb-data wmctrl" ;;
+        *) ubu_die "usage: x11.sh setup [desktop]" ;;
+    esac
     "$UBU_BIN_DIR/mount.sh" >/dev/null 2>&1 || ubu_die "mount.sh failed"
-    "$UBU_BIN_DIR/enter.sh" root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $WM xkb-data"
+    "$UBU_BIN_DIR/enter.sh" root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $_p"
 }
 
 case "${1:-}" in
@@ -316,6 +508,16 @@ case "${1:-}" in
         [ $# = 3 ] || ubu_die "usage: x11.sh run USER ID"
         run "$2" "$3"
         ;;
-    setup) setup ;;
-    *) ubu_die "usage: x11.sh status|start|stop|apps [USER]|icons [USER]|run USER ID|setup" ;;
+    windows)
+        _u=${2:-${DEFAULT_USER:-root}}
+        user_ok "$_u"
+        windows "$_u"
+        ;;
+    focus) window_cmd -a "${2:-}" ;;
+    close) window_cmd -c "${2:-}" ;;
+    desktop) desktop "${2:-${DEFAULT_USER:-root}}" ;;
+    setup) setup "${2:-}" ;;
+    mozilla) mozilla ;;
+    firefox) firefox ;;
+    *) ubu_die "usage: x11.sh status|start|stop|apps [USER]|icons [USER]|run USER ID|windows [USER]|focus|close WINDOW|desktop USER|setup [desktop]|mozilla|firefox" ;;
 esac

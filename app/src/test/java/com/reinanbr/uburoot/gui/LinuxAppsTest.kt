@@ -53,6 +53,22 @@ class LinuxAppsTest {
         assertEquals("running", s.desktop)
         assertEquals("installed", s.firefox)
         assertTrue(X11Status.parse(listOf("x11=running", "wm=none", "switch=no")).toolsMissing)
+        assertEquals("missing", s.vnc)
+        val v = X11Status.parse(listOf("x11=running", "vnc=lan", "vnc_addr=192.0.2.7:5900"))
+        assertEquals("lan", v.vnc)
+        assertEquals("192.0.2.7:5900", v.vncAddr)
+    }
+
+    @Test
+    fun checksVncPasswords() {
+        assertTrue(LinuxApps.vncPasswordOk("ubu-T3st"))
+        assertTrue(LinuxApps.vncPasswordOk("a'b\"c#1"))
+        assertFalse(LinuxApps.vncPasswordOk("short"))
+        assertFalse(LinuxApps.vncPasswordOk("toolongpw"))
+        assertFalse(LinuxApps.vncPasswordOk("has space"))
+        assertFalse(LinuxApps.vncPasswordOk("-nabcdef"))
+        assertFalse(LinuxApps.vncPasswordOk("back\\sl"))
+        assertFalse(LinuxApps.vncPasswordOk("çãoabcd"))
     }
 
     @Test

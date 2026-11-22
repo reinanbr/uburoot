@@ -947,10 +947,55 @@ check "x11.sh run of an open app brings its window back (no second start)" h_xre
 check "x11.sh focus/close: window ids checked, wmctrl called" h_xfocus
 check "x11.sh desktop: refused without XFCE, then startxfce4 as the user" h_xdesktop
 check "x11.sh mozilla: key/source/pin root-owned, firefox from packages.mozilla.org" h_xmozilla
+# VNC: TigerVNC's real Xvnc (display :1) with the fake startxfce4 above.
+rfb_types() { # HOST -> the security types the server offers, e.g. "19,2"
+    perl -MIO::Socket::INET -e '$s = IO::Socket::INET->new(PeerAddr => $ARGV[0], PeerPort => 5900, Timeout => 5) or exit 1;
+        sysread($s, $v, 12); syswrite($s, $v); sysread($s, $n, 1); sysread($s, $t, ord $n); print join(",", unpack("C*", $t)), "\n"' "$1"
+}
+listeners() { awk '$4 == "0A" { split($2, a, ":"); if (a[2] == "170C" || a[2] == "1771") print a[1] ":" a[2] }' /proc/net/tcp /proc/net/tcp6 | sort; }
+CIP=$(awk -v h="$(hostname)" '$2 == h { print $1; exit }' /etc/hosts)
+# The section's empty stand-in for xkb-data goes first: xkb-data 2.46 makes
+# /usr/share/X11/xkb a link to ../xkeyboard-config-2, which dpkg won't put over a dir.
+h_vsetup() {
+    rmdir $R/usr/share/X11/xkb && xo setup vnc >/tmp/vnc-setup.log 2>&1 &&
+        [ -d $R/usr/share/X11/xkb/rules ] && xo status | grep -qx vnc=off
+}
+h_vnopw() { ! xo vnc start tester 2>/dev/null && [ -z "$(listeners)" ]; }
+h_vpw() {
+    for _p in short 'has space' toolongpw; do
+        if echo "$_p" | xo vnc password tester 2>/dev/null; then return 1; fi
+    done
+    echo 'ubu-T3st' | xo vnc password tester 2>/dev/null &&
+        [ "$(stat -c %u:%a:%s $R/home/tester/.vnc/passwd)" = 9000:600:8 ]
+}
+h_vlocal() {
+    rm -f $R/tmp/desk-ran
+    xo vnc start tester >/dev/null 2>&1 || return 1
+    for _i in 1 2 3 4 5; do [ -s $R/tmp/desk-ran ] && break; sleep 1; done
+    # 127.0.0.1 and ::1 only, port 5900 (170C); no X11 over TCP (6001 = 1771).
+    [ "$(listeners)" = "00000000000000000000000001000000:170C
+0100007F:170C" ] && [ "$(rfb_types 127.0.0.1)" = "19,2" ] &&
+        xo status | grep -qx vnc=local && xo status | grep -qx vnc_addr=127.0.0.1:5900 &&
+        grep -q '^:1 tester' $R/tmp/desk-ran
+}
+h_vlan() {
+    ! env UBU_WIFI_IP= /system/bin/sh $B/x11.sh vnc start tester lan 2>/dev/null || return 1
+    env UBU_WIFI_IP="$CIP" /system/bin/sh $B/x11.sh vnc start tester lan >/dev/null 2>&1 || return 1
+    [ "$(listeners | wc -l)" = 1 ] && [ "$(rfb_types "$CIP")" = 19 ] && ! rfb_types 127.0.0.1 >/dev/null 2>&1 &&
+        xo status | grep -qx vnc=lan && xo status | grep -qx "vnc_addr=$CIP:5900"
+}
+h_vstop() { xo vnc stop && [ -z "$(listeners)" ] && xo status | grep -qx vnc=off && [ ! -e $R/tmp/.X11-unix/X1 ]; }
+check "x11.sh setup vnc installs TigerVNC" h_vsetup
+check "x11.sh vnc start refused without a password" h_vnopw
+check "x11.sh vnc password: 6-8 printable characters, ~/.vnc/passwd 0600" h_vpw
+check "x11.sh vnc start: loopback only, VNC auth/TLS, no X over TCP, XFCE on :1" h_vlocal
+check "x11.sh vnc start lan: only the Wi-Fi address, TLS only; refused without Wi-Fi" h_vlan
+check "x11.sh vnc stop: nothing listens" h_vstop
 rm -f $R/usr/bin/wmctrl $R/usr/bin/startxfce4 $A/sw.desktop $R/tmp/wmctrl.log $R/tmp/desk-ran \
     $R/etc/apt/keyrings/packages.mozilla.org.asc $R/etc/apt/sources.list.d/mozilla.sources $R/etc/apt/preferences.d/80uburoot-mozilla
 check "umount.sh stops the X server" h_xumount
-rm -rf $R/usr/share/X11/xkb $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $A/xfceonly.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
+[ -L $R/usr/share/X11/xkb ] || rm -rf $R/usr/share/X11/xkb
+rm -rf $A/fakegui.desktop $A/hidden.desktop $A/term.desktop $A/xfceonly.desktop $R/home/tester/.local /tmp/outside.desktop $R/etc/uburoot/x11 \
     $R/usr/share/icons/hicolor/48x48/apps/fakegui.png /data/local/uburoot/state/x11.prefs
 
 section "gpu.sh (GPU driver, fake Adreno)"

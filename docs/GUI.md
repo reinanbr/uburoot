@@ -170,9 +170,11 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   | Full screen 720x1420 (terrain/refract/jellyfish) | 9 | **36** (terrain 3 → 38 FPS) |
   | Window 640x480 (simple scenes) | 51 | 43 |
 
-  On screen every frame is copied into the X server by the CPU (no DRI3 path to
-  Termux:X11; `MIT-SHM` is missing too: Android kernels have no SysV IPC, "shmget():
-  Function not implemented"), which caps it near 40–45 FPS. Heavy 3D still runs about
+  On screen every frame is copied into the X server by the CPU, which caps it near
+  40–45 FPS. Termux:X11 advertises DRI3 and MIT-SHM (`xdpyinfo`), but the clients here
+  can't use them: Mesa logs "DRI2/DRI3: failed to create screen", and MIT-SHM needs
+  SysV shared memory, which Android kernels lack ("shmget(): Function not
+  implemented"). A zero-copy path through Termux:X11's DRI3 is not researched yet. Heavy 3D still runs about
   10× faster. Light 2D apps don't gain. vkcube: 300 frames in 6.4 s.
 - Other GPUs (Mali, PowerVR…): no KGSL, so `gpu=none` and llvmpipe. Panfrost needs the
   upstream kernel driver, which Android kernels don't have. Not researched further
@@ -273,9 +275,8 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   panel's window list. Apps opened from the *Linux apps* screen meanwhile appear as
   windows (no matchbox is started while another WM runs). *Stop the display* ends it.
   Started in 4.8 s on the S9.
-- Localhost only: the X server listens on a Unix socket inside the rootfs, never on the
-  network. LAN access (VNC with a password, as the spec allows as an opt-in) is not
-  done.
+- The phone's screen is local only: Termux:X11 listens on a Unix socket inside the
+  rootfs, never on the network. Network access is the VNC desktop below, opt-in.
 - Time zone: Ubuntu Base has no time zones at all (UTC). `setup.sh` installs `tzdata`,
   and every mount sets Ubuntu's zone to Android's (`persist.sys.timezone`), unless one
   was picked inside Ubuntu (`sudo dpkg-reconfigure tzdata`). On an older install, run
@@ -306,3 +307,34 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
 - XFCE's settings dialogs and launchers (`OnlyShowIn=XFCE;`) stay out of the *Linux
   apps* list: they appear in the desktop's own menu.
 - To remove it: `apt remove firefox`, then delete the three files above.
+
+### Remote desktop over VNC (localhost by default, Wi-Fi as an opt-in)
+
+- Mirroring Termux:X11's screen doesn't work: TigerVNC's `x0vncserver` (and any screen
+  scraper) reads the root window, which Termux:X11 leaves empty because it composes the
+  windows itself. On the S9 `xwd -root` returned one colour, `xwd -id WINDOW` the
+  content. So the VNC desktop is a session of its own, like NetHunter's KeX: TigerVNC's
+  `Xvnc` (`Xtigervnc`, package `tigervnc-standalone-server` 1.15.0) on display `:1`,
+  1920x1080 (viewers can resize it), with XFCE in a `dbus-run-session` of its own.
+- `x11.sh setup vnc`, then `echo PASSWORD | x11.sh vnc password USER` (6 to 8 printable
+  characters, read and stored as the user with `tigervncpasswd -f` into
+  `~/.vnc/passwd`, 0600; it is never in an argv) and `x11.sh vnc start USER [lan]`.
+  The *Linux apps* screen has the same: password field, a Wi-Fi checkbox, start/stop.
+- Default: `-localhost` (127.0.0.1 and ::1), `-SecurityTypes TLSVnc,VncAuth`. Other
+  Android apps can reach localhost too, so the password is always required. AVNC on
+  the phone connects to `localhost:5900`.
+- `lan`: `-interface WIFI_IPV4` (wlan0's address, read with Android's `ip`; refused
+  without Wi-Fi) and `-SecurityTypes TLSVnc` only: VeNCrypt with anonymous TLS, then the
+  VNC password. It never listens on mobile data, where the phone may have a public IPv6
+  address. Anonymous TLS stops eavesdropping, not an active man in the middle, and VNC
+  passwords are at most 8 characters: use it on a network you trust.
+  Options checked in TigerVNC v1.15.0's `unix/x0vncserver/x0vncserver.man` (the same
+  rfb parameters as Xvnc); AVNC's README lists "TLS support (AnonTLS, VeNCrypt)".
+- Always `-nolisten tcp`: no X11 port.
+- S9: local mode, XFCE at 1920x1080 captured over VNC from the phone itself
+  (`vncsnapshot`), wrong password refused. Wi-Fi mode, from a computer on the same
+  network with TigerVNC's viewer: only one listener (the Wi-Fi IPv4, port 5900), only
+  type 19 (VeNCrypt) offered, a VNC-auth-only client refused ("No matching security
+  types"), a wrong password refused, the right one showed the XFCE desktop. The phone's
+  own screen kept its app mode meanwhile (the `:1` session's XFCE is not counted as the
+  phone's desktop: `x11.sh` checks each process's `DISPLAY`).

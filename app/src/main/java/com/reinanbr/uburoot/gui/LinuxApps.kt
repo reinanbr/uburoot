@@ -27,6 +27,10 @@ data class X11Status(
     val desktop: String = "missing",
     /** Firefox (from Mozilla's repository): installed or missing. */
     val firefox: String = "missing",
+    /** The VNC desktop: missing, off, local (this phone only) or lan (Wi-Fi, TLS). */
+    val vnc: String = "missing",
+    /** Where it listens (`IP:PORT`) while on. */
+    val vncAddr: String = "",
 ) {
     val installed get() = x11 != "missing"
     val running get() = x11 == "running"
@@ -49,6 +53,8 @@ data class X11Status(
                 switch = m["switch"] == "yes",
                 desktop = m["desktop"] ?: "missing",
                 firefox = m["firefox"] ?: "missing",
+                vnc = m["vnc"] ?: "missing",
+                vncAddr = m["vnc_addr"].orEmpty(),
             )
         }
     }
@@ -99,8 +105,26 @@ object LinuxApps {
     /** The XFCE desktop session as [user] (starts the X server if needed). */
     suspend fun desktop(user: String) = RootShell.run("$x11 desktop ${Sh.quote(user)}")
 
-    /** apt: the window tools; with [desktop], XFCE. */
-    fun setupCmd(desktop: Boolean) = "$x11 setup" + if (desktop) " desktop" else ""
+    /** apt: the window tools, or "desktop" (XFCE) / "vnc" (TigerVNC). */
+    fun setupCmd(what: String = "") = "$x11 setup" + if (what.isEmpty()) "" else " $what"
+
+    /**
+     * A VNC password x11.sh accepts (6–8 printable ASCII characters). Stricter here: it
+     * travels through `echo` (a builtin, so in no argv), which may read a leading "-" or
+     * a backslash.
+     */
+    fun vncPasswordOk(p: String) = p.length in 6..8 && p.all { it in '!'..'~' && it != '\\' } && !p.startsWith("-")
+
+    /** Sets [user]'s VNC password (on stdin, never in an argument). */
+    suspend fun vncPassword(user: String, password: String): RootShell.Result {
+        require(vncPasswordOk(password))
+        return RootShell.run("echo ${Sh.quote(password)} | $x11 vnc password ${Sh.quote(user)}")
+    }
+
+    suspend fun vncStart(user: String, lan: Boolean) =
+        RootShell.run("$x11 vnc start ${Sh.quote(user)}" + if (lan) " lan" else "")
+
+    suspend fun vncStop() = RootShell.run("$x11 vnc stop")
 
     /** Adds Mozilla's APT repository and installs Firefox from it. */
     val firefoxCmd get() = "$x11 firefox"

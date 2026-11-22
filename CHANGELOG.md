@@ -44,6 +44,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   photo, MJPEG stream), sensors (`uburoot-sensors`) and GNSS (`uburoot-gps`: NMEA for
   gpsd, one fix) in Ubuntu, served by the app over token-protected Unix sockets, for
   root and the users granted the class.
+- **Remote desktop (VNC)**: *Linux apps* → *Remote desktop* runs the XFCE desktop as a
+  VNC session for AVNC on the phone or a computer: this phone only by default, or the
+  Wi-Fi network (TLS only, never mobile data); a password is always required.
 - Ubuntu uses Android's time zone (it was UTC). Installs made before need
   `sudo apt install tzdata` once. A zone you pick inside Ubuntu is kept.
 - Switch between open Linux apps: the *Linux apps* screen lists the open windows (tap

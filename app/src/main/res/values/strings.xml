@@ -267,6 +267,17 @@
     <string name="gui_firefox_title">Browser</string>
     <string name="gui_firefox_hint">Ubuntu\'s firefox package only installs a snap, which can\'t run here. This adds Mozilla\'s own APT repository (packages.mozilla.org) to Ubuntu and installs Firefox from it (about 85 MB). Its sandbox works without user namespaces, which the kernel refuses inside a chroot.</string>
     <string name="gui_firefox_install">Install Firefox from Mozilla</string>
+    <string name="vnc_title">Remote desktop (VNC)</string>
+    <string name="vnc_hint">A separate XFCE desktop (1920x1080, not the phone\'s screen) for a VNC viewer: AVNC on this phone (address localhost:5900), or a computer on the same Wi-Fi.</string>
+    <string name="vnc_needs_desktop">Install the desktop first.</string>
+    <string name="vnc_install">Install the VNC server (TigerVNC, about 2 MB)</string>
+    <string name="vnc_password">VNC password (6 to 8 characters)</string>
+    <string name="vnc_set_password">Save the password</string>
+    <string name="vnc_lan">Also allow other devices on this Wi-Fi network (encrypted with TLS; anyone with the password can use this desktop). Never on mobile data.</string>
+    <string name="vnc_start">Start the VNC desktop</string>
+    <string name="vnc_stop">Stop the VNC desktop</string>
+    <string name="vnc_on_local">On this phone only: %1$s</string>
+    <string name="vnc_on_lan">On the Wi-Fi network (TLS only): %1$s</string>
     <string name="gpu_title">GPU</string>
     <string name="gpu_none">No Adreno GPU found: Linux apps draw in software (llvmpipe).</string>
     <string name="gpu_missing">%1$s found. Ubuntu\'s Vulkan driver can\'t reach it on Android, so apps draw in software. Install Mesa\'s Turnip driver built for Android (about 3 MB from UbuRoot\'s GitHub releases, checked against the release\'s SHA256SUMS).</string>

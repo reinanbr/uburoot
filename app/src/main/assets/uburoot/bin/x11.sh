@@ -10,7 +10,8 @@
 #
 # Usage: x11.sh status                 x11=missing|stopped|running, wm=NAME|none|missing,
 #                                      switch=yes|no, desktop=missing|ready|running,
-#                                      audio=missing|bridge-off|ready, firefox=installed|missing
+#                                      audio=missing|bridge-off|ready, firefox=installed|missing,
+#                                      vnc=missing|off|local|lan, vnc_addr=IP:PORT
 #        x11.sh start                  mount, start the server (+ a window manager)
 #        x11.sh stop                   stop the server (umount.sh does it too)
 #        x11.sh apps [USER]            ID|NAME|ICON for each GUI .desktop entry
@@ -20,7 +21,12 @@
 #        x11.sh windows [USER]         WINDOW|ID|TITLE of each open window (ID: its entry)
 #        x11.sh focus|close WINDOW     bring a window to the front / ask it to close
 #        x11.sh desktop USER           the XFCE desktop session (replaces the app mode WM)
-#        x11.sh setup [desktop]        install the window tools, or the desktop (apt)
+#        x11.sh setup [desktop|vnc]    install the window tools, the desktop or VNC (apt)
+#        x11.sh vnc password USER      USER's VNC password, read from stdin (6-8 characters)
+#        x11.sh vnc start USER [lan]   the XFCE desktop over VNC (display :1, port 5900):
+#                                      this phone only, or the Wi-Fi network too (lan, TLS
+#                                      only); a password is always needed
+#        x11.sh vnc stop
 #        x11.sh mozilla                add Mozilla's APT repository (for Firefox)
 #        x11.sh firefox                mozilla, then apt install firefox
 set -u
@@ -54,12 +60,26 @@ running() {
     [ -n "$_p" ] && kill -0 "$_p" 2>/dev/null && bb grep -q uburoot-x11 "/proc/$_p/cmdline" 2>/dev/null
 }
 
-# The running window manager's name, if any (processes inside the rootfs).
-wm_running() {
+# "PID NAME" for each process running one of Ubuntu's /usr/bin/NAMES.
+exe_pids() { # "NAMES"
     # shellcheck disable=SC2012 # symlink targets of /proc/*/exe
-    ls -l /proc/[0-9]*/exe 2>/dev/null | bb awk -v names="$WMS" '
+    ls -l /proc/[0-9]*/exe 2>/dev/null | bb awk -v names="$1" -v r="$R" '
         BEGIN { n = split(names, w, " ") }
-        $(NF - 1) == "->" { for (i = 1; i <= n; i++) if ($NF ~ ("/usr/bin/" w[i] "$")) { print w[i]; exit } }'
+        $(NF - 1) == "->" { for (i = 1; i <= n; i++) if ($NF == r "/usr/bin/" w[i] || $NF == "/usr/bin/" w[i]) {
+            split($(NF - 2), a, "/"); print a[3], w[i] } }'
+}
+
+# PID belongs to the phone's screen, not to the VNC desktop (DISPLAY=:1).
+on_screen() { ! tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null | bb grep -qx "DISPLAY=:$VNC_DISPLAY"; }
+
+# The window manager running on the phone's screen, if any (processes inside the rootfs).
+wm_running() {
+    exe_pids "$WMS" | while read -r _p _n; do
+        if on_screen "$_p"; then
+            echo "$_n"
+            break
+        fi
+    done
 }
 
 # Processes running Ubuntu's /usr/bin/NAME.
@@ -230,7 +250,7 @@ window_cmd() { # -a|-c WINDOW
 # Desktop mode: an XFCE session (docs/GUI.md: XFCE over LXQt). It takes over from the
 # app mode's matchbox; the windows already open stay open.
 desktop_state() {
-    if [ -n "$(pids_of xfce4-session)" ]; then
+    if [ -n "$(exe_pids xfce4-session | while read -r _p _n; do on_screen "$_p" && echo "$_p"; done)" ]; then
         echo running
     elif [ -x "$R/usr/bin/startxfce4" ]; then
         echo ready
@@ -323,6 +343,119 @@ Pin-Priority: 1000
 EOF
     "$UBU_BIN_DIR/enter.sh" root "apt-get update" || ubu_die "apt-get update failed"
     ubu_log "Mozilla's repository added"
+}
+
+# Remote desktop (VNC), the KeX equivalent: TigerVNC's Xvnc runs a second X display
+# (:1) with the XFCE desktop, as the user. Not a mirror of Termux:X11's screen: that
+# server composes windows itself, so its root window reads back empty (seen on the S9).
+# Default: 127.0.0.1/::1 only (AVNC on the phone), which other Android apps can still
+# reach, so a password is always required (VNC auth, or TLS + VNC auth). "lan": only on
+# the Wi-Fi address (never mobile data, where an IPv6 address may be public) and only
+# with TLS (VeNCrypt TLSVnc: AVNC and TigerVNC's viewer support it). docs/GUI.md.
+VNC_PORT=5900
+VNC_DISPLAY=1
+VNC_GEOMETRY=1920x1080
+# The real files: Xvnc/vncpasswd are absolute links through /etc/alternatives, which
+# from Android's side point out of the rootfs.
+VNC_EXE=Xtigervnc
+VNC_STATE="$UBU_STATE/vnc"
+
+wifi_ip() {
+    if [ -n "${UBU_WIFI_IP+x}" ]; then
+        _ip=$UBU_WIFI_IP
+    else
+        _ip=$(/system/bin/ip -4 -o addr show wlan0 2>/dev/null | bb awk '{ split($4, a, "/"); print a[1]; exit }')
+    fi
+    case "$_ip" in '' | *[!0-9.]*) return 1 ;; esac
+    echo "$_ip"
+}
+
+vnc_state() {
+    if [ ! -x "$R/usr/bin/$VNC_EXE" ] || [ ! -x "$R/usr/bin/tigervncpasswd" ]; then
+        echo "vnc=missing"
+    elif [ -n "$(pids_of "$VNC_EXE")" ] && [ -f "$VNC_STATE" ]; then
+        bb sed -n 's/^mode=/vnc=/p; s/^addr=/vnc_addr=/p' "$VNC_STATE"
+    else
+        echo "vnc=off"
+    fi
+}
+
+vnc_stop() {
+    _p=$(pids_of "$VNC_EXE")
+    # shellcheck disable=SC2086 # a list of pids
+    [ -z "$_p" ] || kill $_p 2>/dev/null
+    _i=0
+    while [ -n "$(pids_of "$VNC_EXE")" ] && [ "$_i" -lt 10 ]; do
+        sleep 0.5
+        _i=$((_i + 1))
+    done
+    # The session's programs exit with their X server.
+    rm -f "$VNC_STATE" "$R/tmp/.X$VNC_DISPLAY-lock" "$R/tmp/.X11-unix/X$VNC_DISPLAY"
+}
+
+vnc_password() { # USER (password on stdin)
+    user_ok "$1"
+    [ -x "$R/usr/bin/tigervncpasswd" ] || ubu_die "VNC is not installed (x11.sh setup vnc)"
+    "$UBU_BIN_DIR/mount.sh" >/dev/null 2>&1 || ubu_die "mount.sh failed"
+    if ! { mkdir -p "$R/run/uburoot-x11" && chown 0:0 "$R/run/uburoot-x11" && chmod 755 "$R/run/uburoot-x11"; }; then
+        ubu_die "cannot prepare /run/uburoot-x11"
+    fi
+    # Read and checked as the user, inside Ubuntu: the password is in no argv.
+    cat >"$R/run/uburoot-x11/vncpw.$$" <<'EOF'
+IFS= read -r p || exit 2
+case "$p" in *[!!-~]*) echo "the password must be printable ASCII without spaces" >&2; exit 2 ;; esac
+if [ ${#p} -lt 6 ] || [ ${#p} -gt 8 ]; then echo "the password must have 6 to 8 characters" >&2; exit 2; fi
+umask 077
+mkdir -p "$HOME/.vnc" || exit 1
+printf '%s\n' "$p" | tigervncpasswd -f >"$HOME/.vnc/passwd.new" && mv -f "$HOME/.vnc/passwd.new" "$HOME/.vnc/passwd"
+EOF
+    chmod 644 "$R/run/uburoot-x11/vncpw.$$"
+    _out=$("$UBU_BIN_DIR/enter.sh" "$1" "sh /run/uburoot-x11/vncpw.$$" 2>&1)
+    _rc=$?
+    rm -f "$R/run/uburoot-x11/vncpw.$$"
+    printf '%s\n' "$_out" | bb grep -v -e '^\[uburoot\]' -e '^$' >&2
+    [ "$_rc" = 0 ] || ubu_die "the VNC password was not saved"
+    _h=$(home_of "$1")
+    [ "$(bb stat -c %s "$R$_h/.vnc/passwd" 2>/dev/null)" = 8 ] || ubu_die "the VNC password was not saved"
+    ubu_log "VNC password set for $1"
+}
+
+vnc_start() { # USER [lan]
+    user_ok "$1"
+    [ "$(vnc_state)" != vnc=missing ] || ubu_die "VNC is not installed (x11.sh setup vnc)"
+    [ -x "$R/usr/bin/startxfce4" ] || ubu_die "the desktop is not installed (x11.sh setup desktop)"
+    _h=$(home_of "$1")
+    if [ ! -f "$R$_h/.vnc/passwd" ] || [ -L "$R$_h/.vnc/passwd" ] || ! inside "$R$_h/.vnc/passwd"; then
+        ubu_die "set a VNC password first"
+    fi
+    case "${2:-}" in
+        '') _mode=local _args="-localhost -SecurityTypes TLSVnc,VncAuth" _addr="127.0.0.1:$VNC_PORT" ;;
+        lan)
+            _ip=$(wifi_ip) || ubu_die "Wi-Fi is not connected: the network option needs it"
+            _mode=lan _args="-interface $_ip -SecurityTypes TLSVnc" _addr="$_ip:$VNC_PORT"
+            ;;
+        *) ubu_die "usage: x11.sh vnc start USER [lan]" ;;
+    esac
+    ubu_rootfs_installed || ubu_die "Ubuntu is not installed"
+    "$UBU_BIN_DIR/mount.sh" >/dev/null 2>&1 || ubu_die "mount.sh failed"
+    vnc_stop
+    mkdir -p "$R/tmp/.X11-unix" && chmod 1777 "$R/tmp/.X11-unix"
+    # No X over TCP; the RFB port only where chosen above.
+    # shellcheck disable=SC2016 # $HOME is the user's
+    as_user_bg "$1" "$VNC_EXE :$VNC_DISPLAY -geometry $VNC_GEOMETRY -depth 24 -nolisten tcp -rfbport $VNC_PORT $_args"' -PasswordFile "$HOME/.vnc/passwd"' ||
+        ubu_die "could not start the VNC server"
+    _i=0
+    while [ ! -S "$R/tmp/.X11-unix/X$VNC_DISPLAY" ] && [ "$_i" -lt 20 ]; do
+        sleep 0.5
+        _i=$((_i + 1))
+    done
+    [ -n "$(pids_of "$VNC_EXE")" ] || ubu_die "the VNC server did not start (~/.cache/uburoot-x11.log)"
+    # A session bus of its own: the phone's screen may run another XFCE session.
+    as_user_bg "$1" "env -u DBUS_SESSION_BUS_ADDRESS DISPLAY=:$VNC_DISPLAY sh -c 'command -v dbus-run-session >/dev/null && exec dbus-run-session -- startxfce4; exec startxfce4'" ||
+        ubu_die "could not start the desktop"
+    start_audio "$1"
+    printf 'mode=%s\naddr=%s\nuser=%s\n' "$_mode" "$_addr" "$1" >"$VNC_STATE"
+    ubu_log "VNC desktop on $_addr ($_mode)"
 }
 
 firefox_state() {
@@ -480,13 +613,15 @@ status() {
     echo "desktop=$(desktop_state)"
     echo "audio=$(audio_state)"
     echo "firefox=$(firefox_state)"
+    vnc_state
 }
 
 setup() { # [desktop]
     case "${1:-}" in
         '') _p="$WM xkb-data wmctrl" ;;
         desktop) _p="xfce4 xfce4-terminal xkb-data wmctrl" ;;
-        *) ubu_die "usage: x11.sh setup [desktop]" ;;
+        vnc) _p="tigervnc-standalone-server tigervnc-tools" ;;
+        *) ubu_die "usage: x11.sh setup [desktop|vnc]" ;;
     esac
     "$UBU_BIN_DIR/mount.sh" >/dev/null 2>&1 || ubu_die "mount.sh failed"
     "$UBU_BIN_DIR/enter.sh" root "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends $_p"
@@ -520,6 +655,14 @@ case "${1:-}" in
     desktop) desktop "${2:-${DEFAULT_USER:-root}}" ;;
     setup) setup "${2:-}" ;;
     mozilla) mozilla ;;
+    vnc)
+        case "${2:-}" in
+            password) vnc_password "${3:-}" ;;
+            start) vnc_start "${3:-}" "${4:-}" ;;
+            stop) vnc_stop ;;
+            *) ubu_die "usage: x11.sh vnc password USER|start USER [lan]|stop" ;;
+        esac
+        ;;
     firefox) firefox ;;
-    *) ubu_die "usage: x11.sh status|start|stop|apps [USER]|icons [USER]|run USER ID|windows [USER]|focus|close WINDOW|desktop USER|setup [desktop]|mozilla|firefox" ;;
+    *) ubu_die "usage: x11.sh status|start|stop|apps [USER]|icons [USER]|run USER ID|windows [USER]|focus|close WINDOW|desktop USER|setup [desktop|vnc]|mozilla|firefox|vnc ..." ;;
 esac

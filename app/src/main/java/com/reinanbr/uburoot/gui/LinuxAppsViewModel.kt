@@ -119,10 +119,30 @@ class LinuxAppsViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** apt-get install of the window tools (matchbox, wmctrl, xkb-data), shown as it runs. */
-    fun installWm() = stream(LinuxApps.setupCmd(desktop = false))
+    fun installWm() = stream(LinuxApps.setupCmd())
 
     /** apt-get install of XFCE. */
-    fun installDesktop() = stream(LinuxApps.setupCmd(desktop = true))
+    fun installDesktop() = stream(LinuxApps.setupCmd("desktop"))
+
+    /** apt-get install of TigerVNC's server. */
+    fun installVnc() = stream(LinuxApps.setupCmd("vnc"))
+
+    fun setVncPassword(password: String) = task { LinuxApps.vncPassword(_state.value.user, password) }
+
+    fun startVnc(lan: Boolean) = task { LinuxApps.vncStart(_state.value.user, lan) }
+
+    fun stopVnc() = task { LinuxApps.vncStop() }
+
+    /** Runs [block], shows its output if it failed (or [okText]), then refreshes. */
+    private fun task(block: suspend () -> RootShell.Result) {
+        if (_state.value.busy) return
+        _state.update { it.copy(busy = true, output = "") }
+        viewModelScope.launch {
+            val r = block()
+            _state.update { it.copy(busy = false, output = r.text.trim()) }
+            refresh()
+        }
+    }
 
     /** Mozilla's APT repository + Firefox (the user tapped the button). */
     fun installFirefox() = stream(LinuxApps.firefoxCmd)

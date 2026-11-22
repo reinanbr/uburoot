@@ -27,11 +27,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -40,6 +43,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -47,6 +53,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -215,6 +223,7 @@ class LinuxAppsActivity : ComponentActivity() {
                     Text(stringResource(R.string.gui_desktop_open))
                 }
             }
+            Vnc(state, s)
             if (s.firefox != "installed") {
                 Title(stringResource(R.string.gui_firefox_title))
                 Hint(stringResource(R.string.gui_firefox_hint))
@@ -225,6 +234,63 @@ class LinuxAppsActivity : ComponentActivity() {
                 ) {
                     Text(stringResource(R.string.gui_firefox_install))
                 }
+            }
+        }
+    }
+
+    /** The XFCE desktop over VNC (display :1), for AVNC on the phone or a computer. */
+    @Composable
+    private fun Vnc(state: LinuxAppsState, s: X11Status) {
+        var password by rememberSaveable { mutableStateOf("") }
+        var lan by rememberSaveable { mutableStateOf(false) }
+        Title(stringResource(R.string.vnc_title))
+        Hint(stringResource(R.string.vnc_hint))
+        when {
+            s.desktop == "missing" -> Hint(stringResource(R.string.vnc_needs_desktop))
+
+            s.vnc == "missing" -> OutlinedButton(
+                onClick = vm::installVnc,
+                enabled = !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(stringResource(R.string.vnc_install)) }
+
+            s.vnc == "local" || s.vnc == "lan" -> {
+                Text(
+                    stringResource(if (s.vnc == "lan") R.string.vnc_on_lan else R.string.vnc_on_local, s.vncAddr),
+                    fontFamily = FontFamily.Monospace,
+                )
+                OutlinedButton(onClick = vm::stopVnc, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.vnc_stop))
+                }
+            }
+
+            else -> {
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = { password = it.take(8) },
+                    label = { Text(stringResource(R.string.vnc_password)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = {
+                        vm.setVncPassword(password)
+                        password = ""
+                    },
+                    enabled = !state.busy && LinuxApps.vncPasswordOk(password),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.vnc_set_password)) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = lan, onCheckedChange = { lan = it })
+                    Text(stringResource(R.string.vnc_lan), style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    onClick = { vm.startVnc(lan) },
+                    enabled = !state.busy,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.vnc_start)) }
             }
         }
     }

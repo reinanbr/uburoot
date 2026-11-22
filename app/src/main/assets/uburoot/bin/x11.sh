@@ -389,7 +389,13 @@ vnc_stop() {
         sleep 0.5
         _i=$((_i + 1))
     done
-    # The session's programs exit with their X server.
+    # Most of the session exits with its X server, not what XFCE's xinitrc forked off
+    # (ssh-agent, gpg-agent: one more ssh-agent per start, seen on the S9). Everything
+    # in Ubuntu with DISPLAY=:1 belongs to this desktop; the user's shared session bus
+    # and the phone screen's apps have DISPLAY=:0 (as_user_bg) and stay.
+    for _p in $(ubu_chroot_pids); do
+        on_screen "$_p" || kill "$_p" 2>/dev/null
+    done
     rm -f "$VNC_STATE" "$R/tmp/.X$VNC_DISPLAY-lock" "$R/tmp/.X11-unix/X$VNC_DISPLAY"
 }
 

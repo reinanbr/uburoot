@@ -331,6 +331,11 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   Options checked in TigerVNC v1.15.0's `unix/x0vncserver/x0vncserver.man` (the same
   rfb parameters as Xvnc); AVNC's README lists "TLS support (AnonTLS, VeNCrypt)".
 - Always `-nolisten tcp`: no X11 port.
+- `vnc stop` stops the server and then every Ubuntu process with `DISPLAY=:1`: XFCE's
+  xinitrc forks off `ssh-agent` and `gpg-agent`, which outlive the X server (on the S9
+  each start left one more `ssh-agent`). Programs started from the VNC desktop stop
+  with it, as with KeX. The user's shared session bus and the phone screen's apps have
+  `DISPLAY=:0` and keep running.
 - S9: local mode, XFCE at 1920x1080 captured over VNC from the phone itself
   (`vncsnapshot`), wrong password refused. Wi-Fi mode, from a computer on the same
   network with TigerVNC's viewer: only one listener (the Wi-Fi IPv4, port 5900), only
@@ -338,3 +343,11 @@ combine with `aid_net_raw`/`aid_net_admin` on an Android kernel is to be verifie
   types"), a wrong password refused, the right one showed the XFCE desktop. The phone's
   own screen kept its app mode meanwhile (the `:1` session's XFCE is not counted as the
   phone's desktop: `x11.sh` checks each process's `DISPLAY`).
+- S9 with the CI release APK of `7371f19`, from the *Linux apps* card: a 3-character
+  password leaves *Save* disabled, 8 characters saved (`~/.vnc/passwd` 0600, 8 bytes);
+  local start in 8.6 s, listeners 127.0.0.1 and ::1 only, types 19,2; VNC auth and
+  TLSVnc with the right password logged in, a wrong one was refused, XFCE at 1920x1080
+  captured over `adb forward`. Wi-Fi start in 11 s: one listener (192.168.3.x:5900),
+  type 19 with subtype 258 only, no VNC auth without TLS, a wrong password refused, the
+  right one (TLS 1.2, AECDH-AES256-SHA) showed the desktop on a computer on the same
+  network; nothing on the phone's loopback. *Stop* left no listener either time.

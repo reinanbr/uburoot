@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -50,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -282,9 +284,19 @@ class LinuxAppsActivity : ComponentActivity() {
                     enabled = !state.busy && LinuxApps.vncPasswordOk(password),
                     modifier = Modifier.fillMaxWidth(),
                 ) { Text(stringResource(R.string.vnc_set_password)) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = lan, onCheckedChange = { lan = it })
-                    Text(stringResource(R.string.vnc_lan), style = MaterialTheme.typography.bodySmall)
+                // The whole row toggles (on the S9 a tap on the text did nothing).
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(value = lan, role = Role.Checkbox, onValueChange = { lan = it }),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = lan, onCheckedChange = null)
+                    Text(
+                        stringResource(R.string.vnc_lan),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
                 Button(
                     onClick = { vm.startVnc(lan) },

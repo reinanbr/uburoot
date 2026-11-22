@@ -984,13 +984,28 @@ h_vlan() {
     [ "$(listeners | wc -l)" = 1 ] && [ "$(rfb_types "$CIP")" = 19 ] && ! rfb_types 127.0.0.1 >/dev/null 2>&1 &&
         xo status | grep -qx vnc=lan && xo status | grep -qx "vnc_addr=$CIP:5900"
 }
-h_vstop() { xo vnc stop && [ -z "$(listeners)" ] && xo status | grep -qx vnc=off && [ ! -e $R/tmp/.X11-unix/X1 ]; }
+# A process forked off by the session (XFCE's ssh-agent) must go, one of the phone
+# screen's (DISPLAY=:0, like the shared session bus) must stay.
+gone() { [ ! -d "/proc/$1" ] || grep -q '^State:.*Z' "/proc/$1/status"; }
+h_vstop() {
+    env -i DISPLAY=:1 "$(command -v chroot)" --userspec=9000:9000 $R /usr/bin/sleep 300 </dev/null >/dev/null 2>&1 &
+    _va=$!
+    env -i DISPLAY=:0 "$(command -v chroot)" --userspec=9000:9000 $R /usr/bin/sleep 301 </dev/null >/dev/null 2>&1 &
+    _vb=$!
+    sleep 1
+    xo vnc stop && [ -z "$(listeners)" ] && xo status | grep -qx vnc=off && [ ! -e $R/tmp/.X11-unix/X1 ] &&
+        gone $_va && ! gone $_vb
+    _r=$?
+    kill $_va $_vb 2>/dev/null
+    wait $_va $_vb 2>/dev/null
+    return $_r
+}
 check "x11.sh setup vnc installs TigerVNC" h_vsetup
 check "x11.sh vnc start refused without a password" h_vnopw
 check "x11.sh vnc password: 6-8 printable characters, ~/.vnc/passwd 0600" h_vpw
 check "x11.sh vnc start: loopback only, VNC auth/TLS, no X over TCP, XFCE on :1" h_vlocal
 check "x11.sh vnc start lan: only the Wi-Fi address, TLS only; refused without Wi-Fi" h_vlan
-check "x11.sh vnc stop: nothing listens" h_vstop
+check "x11.sh vnc stop: nothing listens, the session's leftovers (DISPLAY=:1) stopped" h_vstop
 rm -f $R/usr/bin/wmctrl $R/usr/bin/startxfce4 $A/sw.desktop $R/tmp/wmctrl.log $R/tmp/desk-ran \
     $R/etc/apt/keyrings/packages.mozilla.org.asc $R/etc/apt/sources.list.d/mozilla.sources $R/etc/apt/preferences.d/80uburoot-mozilla
 check "umount.sh stops the X server" h_xumount

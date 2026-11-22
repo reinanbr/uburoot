@@ -4,8 +4,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val appVersionName = "0.3.0"
-val appVersionCode = 4
+val appVersionName = "0.4.0"
+val appVersionCode = 5
 
 android {
     namespace = "com.reinanbr.uburoot"

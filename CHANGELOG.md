@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-21
+
 ### Added
 - **Kernel access** (opt-in, Settings → Kernel, with a warning). It applies after
   *Repair mounts*:
@@ -199,7 +201,8 @@ First release.
 - `iptables` inside Ubuntu now uses the backend that holds Android's rules (legacy on
   current Android) instead of `iptables-nft`.
 
-[Unreleased]: https://github.com/reinanbr/uburoot/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/reinanbr/uburoot/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/reinanbr/uburoot/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/reinanbr/uburoot/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/reinanbr/uburoot/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/reinanbr/uburoot/compare/v0.1.0...v0.2.0

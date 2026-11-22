@@ -882,6 +882,10 @@ download-artifact v8):
   `uburoot-toast`/`uburoot-notify` through the app, doctor 0 failed / 0 warnings, host
   back to 1068 mounts after `umount.sh --kill`. The published APK is byte-identical
   (`a73ead7e…`), and `tools/fdroid-check.sh 4` built it from source identically.
+- v0.4.0 (2026-11-21, kernel/hardware access, Linux GUI apps, VNC desktop): tagged from
+  `6c1011e` + the version bump; CI's release APK of `6c1011e` was tested on the S9 (VNC card,
+  local and Wi-Fi, stop). Since a reboot on 2026-11-21 the S9 has 1124 host mounts (Magisk
+  magic mounts for the `hosts` and `soundpower` modules), no longer 1068.
 - Magisk keeps an uninstalled app's root policy. After uninstalling the debug build,
   uid 10123 still had `policy=2`, and a future app with that uid would get root
   silently. Delete stale rows (`magisk --sqlite "DELETE FROM policies WHERE uid=N"`)
